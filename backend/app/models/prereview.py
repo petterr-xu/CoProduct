@@ -80,3 +80,14 @@ class EvidenceItemModel(Base):
     source_type: Mapped[str] = mapped_column(String(64), nullable=False, default="product_doc")
     trust_level: Mapped[str] = mapped_column(String(32), nullable=False, default="MEDIUM")
 
+
+class UploadedFileModel(Base):
+    __tablename__ = "uploaded_files"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("file"))
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    mime_type: Mapped[str] = mapped_column(String(128), nullable=False, default="application/octet-stream")
+    storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    parse_status: Mapped[str] = mapped_column(String(32), nullable=False, default="PENDING")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)

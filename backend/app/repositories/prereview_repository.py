@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Select, desc, select
 from sqlalchemy.orm import Session
 
-from app.models import EvidenceItemModel, ReportModel, RequestModel, SessionModel
+from app.models import EvidenceItemModel, ReportModel, RequestModel, SessionModel, UploadedFileModel
 
 
 def utc_now() -> datetime:
@@ -129,3 +129,21 @@ class PreReviewRepository:
         )
         return list(self.db.execute(stmt).scalars().all())
 
+    def create_uploaded_file(
+        self,
+        file_name: str,
+        file_size: int,
+        mime_type: str,
+        storage_key: str,
+        parse_status: str = "PENDING",
+    ) -> UploadedFileModel:
+        item = UploadedFileModel(
+            file_name=file_name,
+            file_size=file_size,
+            mime_type=mime_type,
+            storage_key=storage_key,
+            parse_status=parse_status,
+        )
+        self.db.add(item)
+        self.db.flush()
+        return item

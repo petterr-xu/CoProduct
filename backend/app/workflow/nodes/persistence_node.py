@@ -11,5 +11,4 @@ class PersistenceNode:
     """
 
     def __call__(self, state: PreReviewState) -> dict:
-        return {"status": "SUCCESS"}
-
+        return {"status": "DONE"}

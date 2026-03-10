@@ -21,9 +21,10 @@ class Settings(BaseSettings):
 
     max_text_length: int = 12000
     normalized_text_limit: int = 8000
+    upload_dir: str = "./uploaded_files"
+    upload_max_size_mb: int = 20
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
-
