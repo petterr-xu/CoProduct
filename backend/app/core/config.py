@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     normalized_text_limit: int = 8000
     upload_dir: str = "./uploaded_files"
     upload_max_size_mb: int = 20
+    cors_allow_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
 
 @lru_cache(maxsize=1)
