@@ -15,6 +15,7 @@ def get_history(
     page: int = Query(default=1, ge=1),
     pageSize: int = Query(default=20, ge=1, le=100),
 ) -> dict:
+    """Return paginated history list filtered by keyword and capability status."""
     service = HistoryService()
     return service.list_history(
         keyword=keyword,
@@ -22,4 +23,3 @@ def get_history(
         page=page,
         page_size=pageSize,
     )
-

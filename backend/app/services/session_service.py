@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+"""Session lifecycle service (create and version progression)."""
+
 from app.repositories import PreReviewRepository
 
 
 class SessionService:
+    """Encapsulate session creation rules and version increment logic."""
+
     def __init__(self, repo: PreReviewRepository) -> None:
         self.repo = repo
 
     def create_session(self, request_id: str, parent_session_id: str | None = None) -> tuple[str, int]:
+        """Create a new session and return (session_id, version)."""
         version = 1
         if parent_session_id:
             parent = self.repo.get_session(parent_session_id)
@@ -22,4 +27,3 @@ class SessionService:
             status="PROCESSING",
         )
         return session.id, version
-
