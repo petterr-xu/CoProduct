@@ -1,5 +1,19 @@
 # 需求预审 Copilot 产品方案设计
 
+## 仓库结构约定（开发）
+
+```text
+CoProduct/
+  backend/   # 后端服务代码（FastAPI + LangGraph）
+  frontend/  # 前端应用代码（Next.js）
+  docs/      # 技术方案与设计文档
+```
+
+前后端分离开发默认以该结构为准：
+
+- 前端工程根目录：`frontend/`
+- 后端工程根目录：`backend/`
+
 ## 1. 文档信息
 
 - 产品名称：需求预审 Copilot

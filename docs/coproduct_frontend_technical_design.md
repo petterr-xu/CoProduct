@@ -293,36 +293,37 @@ type UploadedFileRef = {
 ## 9. 目录结构（确定版）
 
 ```text
-src/
-  app/
-    review/
-      new/
+frontend/
+  src/
+    app/
+      review/
+        new/
+          page.tsx
+        [sessionId]/
+          page.tsx
+      history/
         page.tsx
-      [sessionId]/
-        page.tsx
-    history/
+      layout.tsx
       page.tsx
-    layout.tsx
-    page.tsx
-  components/
-    base/
-    business/
-    layout/
-  features/
-    create-review/
-    review-detail/
-    history/
-    regenerate/
-  lib/
-    api-client.ts
-    query-client.ts
-    constants.ts
-    utils.ts
-  hooks/
-  stores/
-  schemas/
-  types/
-  styles/
+    components/
+      base/
+      business/
+      layout/
+    features/
+      create-review/
+      review-detail/
+      history/
+      regenerate/
+    lib/
+      api-client.ts
+      query-client.ts
+      constants.ts
+      utils.ts
+    hooks/
+    stores/
+    schemas/
+    types/
+    styles/
 ```
 
 ## 10. UI 规范
