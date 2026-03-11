@@ -29,9 +29,18 @@ async def upload_file(file: UploadFile, db: Session = Depends(get_db)) -> dict:
         return result
     except ValueError as exc:
         db.rollback()
+        raw_message = str(exc)
+        error_code = "FILE_UPLOAD_ERROR"
+        message = raw_message
+        if ":" in raw_message:
+            prefix, suffix = raw_message.split(":", 1)
+            prefix = prefix.strip()
+            if prefix in {"FILE_UPLOAD_ERROR", "FILE_PARSE_ERROR"}:
+                error_code = prefix
+                message = suffix.strip() or raw_message
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error_code": "FILE_UPLOAD_ERROR", "message": str(exc)},
+            detail={"error_code": error_code, "message": message},
         ) from exc
     except Exception as exc:  # noqa: BLE001
         db.rollback()
