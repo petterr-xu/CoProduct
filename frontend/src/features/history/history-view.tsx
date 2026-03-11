@@ -7,6 +7,7 @@ import { LoadingSkeleton } from '@/components/base/loading-skeleton';
 import { SubmitButton } from '@/components/base/submit-button';
 import { HistoryList } from '@/components/business/history-list';
 import { useHistoryList } from '@/hooks/use-review-api';
+import { getApiErrorMessage } from '@/lib/api-client';
 import { CapabilityStatus } from '@/types';
 
 export function HistoryView() {
@@ -53,7 +54,7 @@ export function HistoryView() {
       </form>
 
       {query.isLoading ? <LoadingSkeleton /> : null}
-      {query.error ? <ErrorAlert message={query.error.message} /> : null}
+      {query.error ? <ErrorAlert message={getApiErrorMessage(query.error)} /> : null}
       {query.data ? <HistoryList items={query.data.items} /> : null}
 
       <div className='flex items-center justify-between text-sm text-muted'>

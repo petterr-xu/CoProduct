@@ -4,7 +4,9 @@ export type CapabilityStatus =
   | 'NOT_SUPPORTED'
   | 'NEED_MORE_INFO';
 
-export type ReviewStatus = 'PROCESSING' | 'DONE' | 'FAILED' | 'NOT_FOUND';
+export type SessionStatus = 'PROCESSING' | 'DONE' | 'FAILED';
+export type ReviewViewStatus = SessionStatus | 'NOT_FOUND';
+export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
 export type UploadedFileRef = {
   fileId: string;
@@ -35,12 +37,12 @@ export type PreReviewReportView = {
   sessionId: string;
   parentSessionId?: string | null;
   version: number;
-  status: ReviewStatus;
+  status: SessionStatus;
   summary: string;
   capability: {
     status: CapabilityStatus;
     reason: string;
-    confidence: 'high' | 'medium' | 'low';
+    confidence?: ConfidenceLevel | null;
   };
   evidence: EvidenceItem[];
   structuredRequirement: {

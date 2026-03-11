@@ -1,6 +1,6 @@
 import { CapabilityStatus } from '@/types';
 
-import { STATUS_COLOR_MAP } from '@/lib/constants';
+import { CAPABILITY_LABEL_MAP, STATUS_COLOR_MAP } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -10,7 +10,7 @@ type Props = {
 export function StatusBadge({ status }: Props) {
   return (
     <span className={cn('inline-flex rounded-full border px-2 py-1 text-xs font-semibold', STATUS_COLOR_MAP[status])}>
-      {status}
+      {CAPABILITY_LABEL_MAP[status]}
     </span>
   );
 }

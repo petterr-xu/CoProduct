@@ -15,7 +15,9 @@ import { ReviewHeader } from '@/components/business/review-header';
 import { RiskListCard } from '@/components/business/risk-list-card';
 import { StructuredRequirementCard } from '@/components/business/structured-requirement-card';
 import { SummaryCard } from '@/components/business/summary-card';
+import { UncertaintiesCard } from '@/components/business/uncertainties-card';
 import { useRegenerateReview, useReviewDetail } from '@/hooks/use-review-api';
+import { getApiErrorMessage, isApiClientError } from '@/lib/api-client';
 
 type Props = {
   sessionId: string;
@@ -31,15 +33,17 @@ export function ReviewDetailLayout({ sessionId }: Props) {
   }
 
   if (detailQuery.error) {
-    return <ErrorAlert message={detailQuery.error.message} />;
+    if (
+      isApiClientError(detailQuery.error) &&
+      (detailQuery.error.status === 'NOT_FOUND' || detailQuery.error.httpStatus === 404)
+    ) {
+      return <EmptyState title='任务不存在' description='该预审任务可能已被删除或 sessionId 无效。' />;
+    }
+    return <ErrorAlert message={getApiErrorMessage(detailQuery.error)} />;
   }
 
   if (!detailQuery.data) {
     return <EmptyState title='未找到预审结果' description='请确认 sessionId 是否正确。' />;
-  }
-
-  if (detailQuery.data.status === 'NOT_FOUND') {
-    return <EmptyState title='任务不存在' description='该预审任务可能已被删除或 sessionId 无效。' />;
   }
 
   const data = detailQuery.data;
@@ -52,6 +56,12 @@ export function ReviewDetailLayout({ sessionId }: Props) {
           正在生成中，页面会自动轮询刷新结果。
         </section>
       ) : null}
+      {data.status === 'FAILED' ? (
+        <ErrorAlert
+          title='预审生成失败'
+          message={data.errorMessage || '工作流执行失败，请补充输入后重试或稍后再试。'}
+        />
+      ) : null}
 
       <div className='grid gap-4 lg:grid-cols-2'>
         <SummaryCard summary={data.summary} />
@@ -61,6 +71,7 @@ export function ReviewDetailLayout({ sessionId }: Props) {
         <RiskListCard items={data.risks} />
         <ImpactScopeCard items={data.impactScope} />
         <NextActionsCard items={data.nextActions} />
+        <UncertaintiesCard items={data.uncertainties} />
         <EvidencePanel evidence={data.evidence} />
       </div>
 
@@ -71,6 +82,7 @@ export function ReviewDetailLayout({ sessionId }: Props) {
           router.push(`/review/${result.sessionId}`);
         }}
       />
+      {regenerateMutation.error ? <ErrorAlert title='重新生成失败' message={getApiErrorMessage(regenerateMutation.error)} /> : null}
     </div>
   );
 }
