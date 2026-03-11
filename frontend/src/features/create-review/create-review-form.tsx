@@ -9,6 +9,7 @@ import { ErrorAlert } from '@/components/base/error-alert';
 import { FileUploader } from '@/components/base/file-uploader';
 import { SubmitButton } from '@/components/base/submit-button';
 import { useCreatePreReview } from '@/hooks/use-review-api';
+import { getApiErrorMessage } from '@/lib/api-client';
 import { createReviewSchema, CreateReviewSchema } from '@/schemas/create-review';
 import { useCreateReviewDraftStore } from '@/stores/create-review-draft';
 
@@ -87,7 +88,7 @@ export function CreateReviewForm() {
 
   return (
     <form className='space-y-4' onSubmit={onSubmit}>
-      {mutation.error ? <ErrorAlert message={mutation.error.message} /> : null}
+      {mutation.error ? <ErrorAlert message={getApiErrorMessage(mutation.error)} /> : null}
 
       <div className='space-y-1'>
         <label className='text-sm font-medium'>需求描述 *</label>

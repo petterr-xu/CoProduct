@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 import { EmptyState } from '@/components/base/empty-state';
+import { StatusBadge } from '@/components/base/status-badge';
+import { formatDateTime } from '@/lib/utils';
 import { HistoryItem } from '@/types';
 
 type Props = {
@@ -21,8 +23,8 @@ export function HistoryList({ items }: Props) {
             <span className='text-xs text-muted'>v{item.version}</span>
           </div>
           <div className='mt-2 flex flex-wrap items-center gap-3 text-xs text-muted'>
-            <span>{item.capabilityStatus}</span>
-            <span>{item.createdAt}</span>
+            <StatusBadge status={item.capabilityStatus} />
+            <span>{formatDateTime(item.createdAt)}</span>
           </div>
           <div className='mt-3'>
             <Link className='text-sm text-info underline-offset-2 hover:underline' href={`/review/${item.sessionId}`}>
