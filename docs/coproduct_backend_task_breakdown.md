@@ -84,14 +84,29 @@
 
 1. `RequirementParser`：按固定 schema 输出
 2. `CapabilityJudge`：强制枚举 + 无高质量证据不能 `SUPPORTED`
-3. `MissingInfoAnalyzer/RiskAnalyzer/ImpactAnalyzer`：按默认检查项输出
-4. `ReportComposer`：固定 8 区块 + evidence 引用
+3. `CapabilityJudge`：输出 `confidence`（`high|medium|low`）
+4. `MissingInfoAnalyzer/RiskAnalyzer/ImpactAnalyzer`：按默认检查项输出
+5. `ReportComposer`：固定 8 区块 + evidence 引用
 
 ## 4.3 ModelClient 接入
 
 1. 定义统一 `ModelClient` 接口
 2. 节点改为只调用 `ModelClient`
 3. 结构化输出全部绑定 schema
+
+## 4.4 详情接口契约对齐（M2 必做）
+
+1. `GET /api/prereview/{session_id}` 输出字段级 view model（不返回裸 `report`）
+2. 状态枚举统一为 `PROCESSING|DONE|FAILED`（`NOT_FOUND` 仅错误体使用）
+3. 固化 `capability.confidence` 字段并返回稳定值域
+4. 实现 `SUPPORTED` 门禁：不满足高质量证据规则时强制降级
+
+## 4.5 M2 完成定义（DoD）
+
+1. 报告 8 区块可稳定输出且字段名冻结
+2. evidence 引用可追溯到 `evidence_items`
+3. `capability.status/confidence` 符合契约值域
+4. 详情接口契约可被前端直接消费，无需二次猜测映射
 
 ---
 

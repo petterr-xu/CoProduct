@@ -31,7 +31,8 @@
 1. 详情页触发 `GET /api/prereview/{sessionId}`
 2. `PROCESSING` 状态下自动轮询
 3. 状态变为 `DONE` 或 `FAILED` 时停止轮询
-4. 无效 `sessionId` 时显示 `NOT_FOUND` 语义化提示
+4. 服务返回 `status` 仅为 `PROCESSING|DONE|FAILED`
+5. 无效 `sessionId` 时显示 `NOT_FOUND` 语义化提示（来源于 404 错误体）
 
 ## 2.4 鉴权与基础错误处理
 
@@ -58,6 +59,7 @@
    - `NEED_MORE_INFO`
 2. 枚举颜色语义正确（绿/黄/红/蓝）
 3. 同步显示能力判断理由与置信度
+4. `confidence` 字段缺失时前端有显式降级提示，不出现空白
 
 ## 3.3 证据可读性
 
@@ -70,6 +72,11 @@
 1. loading skeleton、error alert、empty state 样式统一
 2. 刷新页面后能恢复当前 session 的结果展示
 3. 前端错误提示不泄露后端内部堆栈信息
+
+## 3.5 契约一致性
+
+1. 详情页仅依赖字段级 view model，不依赖裸 `report`
+2. 结果页所需字段可稳定渲染：`summary/capability/evidence/structuredRequirement/missingInfo/risks/impactScope/nextActions/uncertainties`
 
 ---
 

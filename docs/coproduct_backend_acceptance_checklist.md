@@ -44,13 +44,21 @@
 
 1. 报告固定 8 区块全部存在
 2. `CapabilityJudge` 输出必须是固定枚举之一
-3. 无高质量证据时，能力判断不能是 `SUPPORTED`
+3. `capability.confidence` 必须存在且值域为 `high|medium|low`
+4. 不满足高质量证据门禁（`trust_level=HIGH` 且 `relevance_score>=0.75` 至少 1 条）时，能力判断不能是 `SUPPORTED`
 
 ## 3.3 可追溯性
 
 1. 报告中的 evidence 引用可映射到 `evidence_items`
 2. 每条 evidence 能追溯到 `doc_id + chunk_id`
 3. 关键节点有 latency 日志
+
+## 3.4 接口契约一致性
+
+1. `GET /api/prereview/{session_id}` 返回字段级 view model（非裸 `report`）
+2. session `status` 仅允许 `PROCESSING|DONE|FAILED`
+3. `NOT_FOUND` 仅在 404 错误体 `detail.status` 中出现
+4. 结果页所需字段（summary/capability/evidence/structuredRequirement/missingInfo/risks/impactScope/nextActions/uncertainties）均可稳定返回
 
 ---
 

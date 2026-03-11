@@ -43,12 +43,46 @@
   "sessionId": "string",
   "parentSessionId": "string|null",
   "version": 1,
-  "status": "PROCESSING|SUCCESS|FAILED",
-  "report": {},
+  "status": "PROCESSING|DONE|FAILED",
+  "summary": "string",
+  "capability": {
+    "status": "SUPPORTED|PARTIALLY_SUPPORTED|NOT_SUPPORTED|NEED_MORE_INFO",
+    "reason": "string",
+    "confidence": "high|medium|low"
+  },
+  "evidence": [
+    {
+      "doc_id": "string",
+      "doc_title": "string",
+      "chunk_id": "string",
+      "snippet": "string",
+      "source_type": "product_doc|api_doc|constraint_doc|case",
+      "relevance_score": 0.0,
+      "trust_level": "HIGH|MEDIUM|LOW"
+    }
+  ],
+  "structuredRequirement": {
+    "goal": "string",
+    "actors": ["string"],
+    "scope": ["string"],
+    "constraints": ["string"],
+    "expectedOutput": "string"
+  },
+  "missingInfo": ["string"],
+  "risks": [{ "title": "string", "description": "string", "level": "high|medium|low" }],
+  "impactScope": ["string"],
+  "nextActions": ["string"],
+  "uncertainties": ["string"],
+  "evidenceCount": 0,
   "errorCode": "string|null",
   "errorMessage": "string|null"
 }
 ```
+
+补充说明：
+
+1. `NOT_FOUND` 只作为 404 错误体中的 `detail.status`，不属于 session 持久化状态枚举。
+2. 后端不直接返回 `report` 原始对象，统一返回前端可消费的字段级 view model。
 
 错误码：`VALIDATION_ERROR` `PERSISTENCE_ERROR`
 
@@ -148,7 +182,7 @@ class PreReviewState(TypedDict):
 状态值建议：
 
 - `PROCESSING`
-- `SUCCESS`
+- `DONE`
 - `FAILED`
 
 ---
@@ -220,11 +254,16 @@ evidence item schema：
 {
   "status": "SUPPORTED|PARTIALLY_SUPPORTED|NOT_SUPPORTED|NEED_MORE_INFO",
   "reason": "string",
+  "confidence": "high|medium|low",
   "evidence_refs": ["chunk_id_1"]
 }
 ```
 
-规则：无高质量证据时禁止 `SUPPORTED`。
+规则：
+
+1. 无高质量证据时禁止 `SUPPORTED`。
+2. 高质量证据定义（M2）：`trust_level = HIGH` 且 `relevance_score >= 0.75`。
+3. 至少有 1 条高质量证据，`status` 才允许为 `SUPPORTED`。
 
 ## 4.7 `MissingInfoAnalyzer`
 
@@ -326,3 +365,4 @@ class ModelClient:
 2. `RiskAnalyzer` 失败：风险区块置空 + 记录错误
 3. `ImpactAnalyzer` 失败：影响区块置空 + 记录错误
 4. `ReportComposer` 失败：session 标记 `FAILED`
+5. 不满足“高质量证据”门禁时：不得输出 `SUPPORTED`

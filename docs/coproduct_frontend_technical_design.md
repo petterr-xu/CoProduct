@@ -114,12 +114,17 @@ type CreatePreReviewForm = {
 8. 下一步建议
 9. 补充信息再生成
 
-状态只允许：
+前端页面状态（View State）：
 
 - `PROCESSING`
 - `DONE`
 - `FAILED`
 - `NOT_FOUND`
+
+说明：
+
+- 后端 session 状态枚举仅：`PROCESSING` / `DONE` / `FAILED`
+- `NOT_FOUND` 来自 `GET /api/prereview/{sessionId}` 的 404 错误体 `detail.status`，仅用于前端页面态展示
 
 数据结构：
 
@@ -270,6 +275,12 @@ app/
 - `POST /api/prereview/:sessionId/regenerate`
 - `GET /api/history`
 - `POST /api/files/upload`
+
+`GET /api/prereview/:sessionId` 约束：
+
+1. 消费后端字段级 view model（`summary/capability/evidence/...`）
+2. 不直接依赖后端内部 `report` 原始结构
+3. `capability.confidence` 必须渲染
 
 ## 8. 文件上传设计
 

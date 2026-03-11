@@ -59,6 +59,7 @@
 2. 建立统一 `api-client.ts`（禁止组件直接 `fetch`）
 3. 注入 API Token 与 Base URL 环境变量读取
 4. 定义统一错误对象映射（`error_code/message/status`）
+5. 锁定 `GET /api/prereview/{sessionId}` 字段级契约，禁止前端消费裸 `report`
 
 ## 4.3 新建预审页 `/review/new`
 
@@ -70,7 +71,7 @@
 ## 4.4 结果页 `/review/[sessionId]`
 
 1. 按 `sessionId` 拉取详情
-2. 渲染基础状态：`PROCESSING/DONE/FAILED/NOT_FOUND`
+2. 渲染基础状态：`PROCESSING/DONE/FAILED` + `NOT_FOUND(404 映射 UI 态)`
 3. `PROCESSING` 状态轮询，直到非 `PROCESSING`
 4. 最小可用结果布局（Header + 状态 + 核心摘要）
 
@@ -98,6 +99,12 @@
 1. 加载骨架、错误态、空态统一
 2. 结果页刷新后可恢复当前展示状态
 3. API 错误按分类展示（鉴权失败/未找到/服务异常）
+
+## 5.4 M2 契约锁定（与后端同步）
+
+1. 对齐后端状态口径：仅处理 `PROCESSING/DONE/FAILED`
+2. `NOT_FOUND` 仅由错误分支驱动，不进入正常 status 分支
+3. `capability.confidence` 作为必渲染字段加入类型与组件检查
 
 ---
 
