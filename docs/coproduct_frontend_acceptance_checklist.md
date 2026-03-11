@@ -78,6 +78,13 @@
 1. 详情页仅依赖字段级 view model，不依赖裸 `report`
 2. 结果页所需字段可稳定渲染：`summary/capability/evidence/structuredRequirement/missingInfo/risks/impactScope/nextActions/uncertainties`
 
+## 3.6 命名一致性（M2.1）
+
+1. 前端对外语义统一为 `prereview`，避免与正式 `review` 概念冲突
+2. 若保留 `/review/*` 路由，必须验证其可稳定重定向到 `/prereview/*`
+3. `RegeneratePanel` 空输入点击“重新生成”时，必须展示可见校验提示（不可无响应）
+4. `RegeneratePanel` 参数校验规则与 `regenerateSchema` 保持一致
+
 ---
 
 ## 4. M3 验收（版本、文件、历史与稳定性）
