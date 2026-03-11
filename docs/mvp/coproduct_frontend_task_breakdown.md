@@ -1,4 +1,7 @@
 # CoProduct 前端任务拆解清单（与后端里程碑同步）
+> Version: v0.2.0
+> Last Updated: 2026-03-11
+> Status: Updated
 
 ## 1. 范围与原则
 
@@ -123,33 +126,51 @@
 
 目标：覆盖完整业务闭环并满足交付标准。
 
-## 6.1 regenerate 流程
+> Obsolete in v0.2.0:
+> 原 M3 拆解未覆盖后端 M3 契约新增点（`parseStatus` 状态语义、history 分页边界与排序、regenerate 附件语义）。
 
-1. `RegenerateDialog` 补充说明输入
-2. 调用 `POST /api/prereview/{session_id}/regenerate`
-3. 成功后跳转新 `sessionId` 并提示版本变化
-4. 异常时保留输入并可重试
+### 6.0 [Obsolete] 原 M3 拆解（保留追溯）
 
-## 6.2 文件上传链路
+1. regenerate：补充说明输入 + 调用 regenerate + 成功跳新 session + 失败可重试
+2. 上传：类型/数量/大小校验 + upload 接口 + `fileId` 注入 + 重试
+3. 历史：分页 + keyword/capabilityStatus + 进入详情 + 继续补充再生成
+4. 稳定性：埋点 + Query 策略 + 页面级兜底 + 联调手册
 
-1. `FileUploader`：类型/数量/大小前置校验
-2. 调用 `POST /api/files/upload` 并展示上传进度
-3. 将返回 `fileId` 注入创建/再生成请求
-4. 上传失败可重试并可移除失败项
+## 6.1 [Updated v0.2.0] regenerate 流程
 
-## 6.3 历史页 `/history`
+1. `RegeneratePanel` 除 `additionalContext` 外支持传递 `attachments.fileId`
+2. 调用 `POST /api/prereview/{session_id}/regenerate` 时与后端契约保持一致
+3. 成功后跳转新 `sessionId` 并展示版本链提示
+4. 失败时保留输入与附件选择，支持直接重试
 
-1. 列表分页查询与缓存
-2. `keyword` 搜索与 `capabilityStatus` 筛选
-3. 点击记录进入对应详情页
-4. 支持从历史记录继续补充再生成
+## 6.2 [Updated v0.2.0] 文件上传链路
 
-## 6.4 稳定性与工程质量
+1. `FileUploader` 保持类型/数量/大小前置校验
+2. 适配上传返回稳定字段：`fileId/fileName/fileSize/parseStatus`
+3. UI 识别并展示 `parseStatus`：`PENDING|PARSING|DONE|FAILED`
+4. 创建与 regenerate 请求都可携带 `attachments.fileId`
+5. `parseStatus=FAILED` 时提供明确提示（可移除、可重传、可降级忽略）
 
-1. 关键交互埋点（提交、查询、再生成、上传）
-2. Query 超时/重试策略统一
-3. 页面级错误边界与兜底提示
-4. 补齐基础联调/回归手册（含环境变量与启动步骤）
+## 6.3 [Updated v0.2.0] 历史页 `/history`
+
+1. 对齐后端真实分页与筛选（不再按“占位空返回”假设开发）
+2. 查询参数边界：`page>=1`、`1<=pageSize<=100`
+3. 支持 `keyword`、`capabilityStatus` 筛选并展示后端默认倒序结果
+4. 列表字段按契约固定：`sessionId/requestText/capabilityStatus/version/createdAt`
+
+## 6.4 [Updated v0.2.0] 稳定性与工程质量
+
+1. Query 层补齐超时策略与重试策略，避免长时间无响应
+2. 页面级错误边界（`error.tsx`）与兜底提示落地
+3. 错误码映射对齐后端：`FILE_UPLOAD_ERROR/FILE_PARSE_ERROR/WORKFLOW_ERROR/...`
+4. 联调手册补充 M3 场景：附件解析失败降级、history 筛选回归、regenerate 附件联动
+
+## 6.5 [Updated v0.2.0] M3 完成定义（DoD）
+
+1. regenerate 支持附件输入并完成版本链跳转
+2. 上传返回字段与 `parseStatus` 语义可被前端稳定消费
+3. 历史页可验证真实分页与筛选行为
+4. 关键错误分支有一致、可读、可恢复的前端交互
 
 ---
 

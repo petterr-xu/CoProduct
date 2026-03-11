@@ -1,8 +1,14 @@
 # CoProduct 前端技术设计方案（确定版）
+> Version: v0.2.0
+> Last Updated: 2026-03-11
+> Status: Updated
 
 > 适用范围：CoProduct 一期 / MVP  
 > 目标：为“需求预审”提供稳定、清晰、可解释的 Web 前端，仅承担输入、展示、交互，不承载核心 AI 逻辑。  
 > 本方案是唯一落地方案，不是备选集合。
+
+> Obsolete in v0.2.0:
+> 原文档中的 M3 说明未覆盖后端契约新增点（`parseStatus` 状态语义、history 参数边界与排序、regenerate 附件语义），以下相关章节已补充更新说明。
 
 ## 1. 方案结论
 
@@ -245,16 +251,27 @@ app/
 ### 6.1 React Query
 负责：
 
-- `getReviewDetail(sessionId)`
-- `getHistoryList(query)`
-- `createPreReview()`
-- `regeneratePreReview(sessionId)`
+> Obsolete in v0.2.0:
+> 下列命名为旧语义（review），M2.1 后实际应统一为 prereview 语义。
+
+1. `getReviewDetail(sessionId)`
+2. `getHistoryList(query)`
+3. `createPreReview()`
+4. `regeneratePreReview(sessionId)`
+
+Updated:
+
+1. `getPrereviewDetail(sessionId)`
+2. `getHistoryList(query)`
+3. `createPrereview()`
+4. `regeneratePrereview(sessionId, payload)`
 
 规则：
 
 - 结果页详情使用轮询，直到状态不是 `PROCESSING`
 - 历史列表使用分页缓存
 - regenerate 成功后跳转新版本结果页
+- regenerate 可携带 `attachments.fileId`
 
 ### 6.2 Zustand
 只保留本地状态：
@@ -282,6 +299,17 @@ app/
 2. 不直接依赖后端内部 `report` 原始结构
 3. `capability.confidence` 必须渲染
 
+`GET /api/history` 约束（M3 对齐）：
+
+1. 查询参数边界：`page>=1`、`1<=pageSize<=100`
+2. `capabilityStatus` 仅允许：`SUPPORTED|PARTIALLY_SUPPORTED|NOT_SUPPORTED|NEED_MORE_INFO`
+3. 列表默认按 `createdAt` 倒序返回
+
+`POST /api/prereview/:sessionId/regenerate` 约束（M3 对齐）：
+
+1. 请求体除 `additionalContext` 外可携带 `attachments: [{fileId}]`
+2. 前端在失败重试时应保留 `additionalContext + attachments`
+
 ## 8. 文件上传设计
 
 前端只负责：
@@ -291,6 +319,9 @@ app/
 - 上传进度展示
 - 获取后端返回的 `fileId`
 
+> Obsolete in v0.2.0:
+> 原返回结构缺少 `parseStatus`，无法表达附件解析状态。
+
 返回结构：
 
 ```ts
@@ -298,8 +329,15 @@ type UploadedFileRef = {
   fileId: string;
   fileName: string;
   fileSize: number;
+  parseStatus?: "PENDING" | "PARSING" | "DONE" | "FAILED";
 };
 ```
+
+交互要求（M3 对齐）：
+
+1. `PENDING/PARSING`：提示“处理中”
+2. `DONE`：可直接参与 create/regenerate
+3. `FAILED`：提示失败原因并允许移除/重传
 
 ## 9. 目录结构（确定版）
 

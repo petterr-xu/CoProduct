@@ -1,11 +1,14 @@
 # CoProduct 前端里程碑验收清单（M1/M2/M3，与后端同步）
+> Version: v0.2.0
+> Last Updated: 2026-03-11
+> Status: Updated
 
 ## 1. 验收原则
 
 - 仅按以下文档判定通过/不通过：
-  - `docs/coproduct_frontend_technical_design.md`
-  - `docs/coproduct_backend_contracts.md`
-  - `docs/coproduct_backend_acceptance_checklist.md`（用于里程碑同步）
+  - `docs/mvp/coproduct_frontend_technical_design.md`
+  - `docs/mvp/coproduct_backend_contracts.md`
+  - `docs/mvp/coproduct_backend_acceptance_checklist.md`（用于里程碑同步）
 - 每条验收项必须可通过页面操作、网络请求或日志截图验证
 - 验收结果分为：`PASS` / `FAIL` / `BLOCKED`
 
@@ -89,19 +92,31 @@
 
 ## 4. M3 验收（版本、文件、历史与稳定性）
 
+> Obsolete in v0.2.0:
+> 原 M3 验收项未覆盖后端契约新增点（`fileSize/parseStatus`、history 参数边界/排序、regenerate 附件语义）。
+
+### 4.0 [Obsolete] 原 M3 验收（保留追溯）
+
+1. regenerate：输入补充说明后成功跳转新 session，失败可重试
+2. 上传：拿到 `fileId` 并注入 create/regenerate
+3. 历史：分页 + keyword/capabilityStatus 筛选
+4. 稳定性：超时/断网可恢复，Query 重试合理，错误边界可兜底
+
 ## 4.1 regenerate
 
 1. 详情页可输入补充说明并触发 regenerate
 2. 调用 `POST /api/prereview/{session_id}/regenerate` 成功后跳转新 session
 3. 新旧 session 在页面上可区分（至少展示 sessionId 或 version）
 4. regenerate 失败时保留用户输入并支持重试
+5. regenerate 请求可携带 `attachments.fileId`，且与后端契约一致
 
 ## 4.2 文件上传链路
 
 1. 前端可选择文件并校验数量/大小/类型
-2. 调用 `POST /api/files/upload` 成功拿到 `fileId`
-3. 创建与 regenerate 请求可带 `attachments.fileId`
-4. 上传失败时可删除失败项并重传
+2. 调用 `POST /api/files/upload` 成功拿到 `fileId/fileName/fileSize/parseStatus`
+3. 前端可展示 `parseStatus`（`PENDING|PARSING|DONE|FAILED`）语义
+4. 创建与 regenerate 请求可带 `attachments.fileId`
+5. 上传或解析失败时可删除失败项并重传，提示信息可读
 
 ## 4.3 历史页
 
@@ -109,6 +124,8 @@
 2. `keyword` 筛选生效
 3. `capabilityStatus` 筛选生效
 4. 点击某条记录可跳转详情页
+5. 分页参数边界生效：`page>=1`、`1<=pageSize<=100`
+6. 列表顺序与后端默认倒序规则一致
 
 ## 4.4 稳定性
 
@@ -116,6 +133,7 @@
 2. Query 重试策略符合预期，不出现无穷重试
 3. 页面级异常由错误边界兜底
 4. 联调环境变量缺失时有明确启动提示
+5. 后端错误码（`FILE_UPLOAD_ERROR/FILE_PARSE_ERROR/WORKFLOW_ERROR`）有稳定前端提示文案
 
 ---
 
