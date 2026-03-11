@@ -1,4 +1,7 @@
 # CoProduct 后端契约清单（接口 + 状态 + 节点 I/O）
+> Version: v0.2.0
+> Last Updated: 2026-03-11
+> Status: Updated
 
 ## 1. 目的
 
@@ -88,6 +91,9 @@
 
 ## 2.3 `POST /api/prereview/{session_id}/regenerate`
 
+> Obsolete in v0.2.0:
+> 原契约仅定义基础请求/响应，未明确 attachments 在 regenerate 中的处理语义。
+
 请求体：
 
 ```json
@@ -112,8 +118,13 @@
 2. `version = old.version + 1`
 3. `parent_session_id = old.session_id`
 4. 重走完整 workflow
+5. 若请求携带 `attachments.fileId`，后端必须尝试读取并解析对应文件文本并参与本次 workflow 输入
+6. 附件解析失败按降级策略处理（记录错误并继续主流程），不直接破坏版本链创建行为
 
 ## 2.4 `GET /api/history`
+
+> Obsolete in v0.2.0:
+> 原响应体为示意，缺少筛选值域、分页边界、排序规则等稳定约束。
 
 查询参数：
 
@@ -122,7 +133,17 @@
 - `page`
 - `pageSize`
 
-响应体（示意）：
+查询参数约束：
+
+1. `page >= 1`
+2. `1 <= pageSize <= 100`
+3. `capabilityStatus` 值域：`SUPPORTED|PARTIALLY_SUPPORTED|NOT_SUPPORTED|NEED_MORE_INFO`
+
+排序规则：
+
+1. 默认按 `createdAt` 倒序返回（新 -> 旧）
+
+响应体（稳定字段）：
 
 ```json
 {
@@ -143,15 +164,26 @@
 
 ## 2.5 `POST /api/files/upload`
 
+> Obsolete in v0.2.0:
+> 原响应体只列出 `fileId/fileName/parseStatus`，未覆盖当前实现中的 `fileSize` 字段。
+
 响应体：
 
 ```json
 {
   "fileId": "string",
   "fileName": "string",
-  "parseStatus": "PENDING"
+  "fileSize": 1024,
+  "parseStatus": "PENDING|PARSING|DONE|FAILED"
 }
 ```
+
+状态语义：
+
+1. `PENDING`：上传完成，待解析
+2. `PARSING`：解析中
+3. `DONE`：解析成功，可用于并入预审输入
+4. `FAILED`：解析失败，可重试或降级忽略
 
 错误码：`FILE_UPLOAD_ERROR` `FILE_PARSE_ERROR`
 

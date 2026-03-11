@@ -1,4 +1,7 @@
 # CoProduct 后端任务拆解清单（基于确定版技术方案）
+> Version: v0.2.0
+> Last Updated: 2026-03-11
+> Status: Updated
 
 ## 1. 范围与原则
 
@@ -114,30 +117,64 @@
 
 目标：满足完整交付标准（第 17 节）。
 
-## 5.1 regenerate 与版本链
+> Obsolete in v0.2.0:
+> 原 M3 拆解粒度偏粗，未体现当前代码与目标能力之间的差距（历史查询占位、附件仅上传未解析并入、节点降级策略未落地）。
 
-1. `POST /api/prereview/{session_id}/regenerate`
-2. 新建 session：`version +1`、`parent_session_id` 指向旧 session
-3. 重走完整 workflow
+### 5.0 [Obsolete] 原 M3 拆解（保留追溯）
 
-## 5.2 文件链路
+1. regenerate 与版本链：`POST /api/prereview/{session_id}/regenerate`、`version +1`、`parent_session_id` 指向旧 session、重走 workflow
+2. 文件链路：`uploaded_files` 表 + `POST /api/files/upload`、白名单和大小限制、解析并入 `normalized_request`
+3. 历史查询：`GET /api/history` 分页 + `keyword/capabilityStatus/page/pageSize`
+4. 稳定性与降级：固定错误码、空检索降级、Risk/Impact 降级、耗时与 token/cost 记录
 
-1. `uploaded_files` 表 + `POST /api/files/upload`
-2. 文件白名单和大小限制
-3. 解析入口（txt/md/pdf/docx）并并入 `normalized_request`
+## 5.1 [Updated v0.2.0] regenerate 与版本链
 
-## 5.3 历史查询
+1. 保持现有契约：`POST /api/prereview/{session_id}/regenerate` 返回新 `sessionId`
+2. 强化版本链校验：`version = old.version + 1`，`parent_session_id = old.session_id`
+3. 约束 attachments 行为：regenerate 的 `attachments.fileId` 必须进入工作流输入并参与后续解析并入流程
+4. 补齐失败分支：父 session 不存在、request 不存在、workflow 失败分别落明确错误码
 
-1. `GET /api/history` 分页
-2. 支持 `keyword/capabilityStatus/page/pageSize`
-3. 支持版本链返回
+## 5.2 [Updated v0.2.0] 文件链路（拆分实施）
 
-## 5.4 稳定性与降级
+### 5.2.1 上传与元数据（基线）
 
-1. 实现固定错误码分类
-2. 检索空结果降级
-3. Risk/Impact 节点失败降级
-4. 节点级耗时、模型耗时、token/cost 记录
+1. `POST /api/files/upload` 维持白名单/大小限制
+2. 返回字段固定：`fileId/fileName/fileSize/parseStatus`
+3. `uploaded_files` 落库完整（含 `mime_type/storage_key/parse_status`）
+
+### 5.2.2 解析状态流转
+
+1. 定义并落地 `parseStatus` 状态：`PENDING -> PARSING -> DONE|FAILED`
+2. 解析失败时返回或记录 `FILE_PARSE_ERROR`，但不破坏上传元数据可追踪性
+3. 支持最小可用格式解析（建议先 txt/md，再扩展 pdf/docx）
+
+### 5.2.3 并入预审输入
+
+1. 在 create/regenerate 中读取 `attachments.fileId` 对应解析文本
+2. 将解析文本并入 `normalized_request.merged_text`
+3. 对解析失败或缺失文件执行降级策略（记录告警并继续主流程，不直接中断）
+
+## 5.3 [Updated v0.2.0] 历史查询（替换占位实现）
+
+1. 用 repository 实现真实 `GET /api/history` 分页查询
+2. 支持筛选：`keyword`、`capabilityStatus`
+3. 返回稳定字段：`sessionId/requestText/capabilityStatus/version/createdAt`
+4. 固化排序规则（默认按创建时间倒序）与分页边界（`page>=1`、`1<=pageSize<=100`）
+
+## 5.4 [Updated v0.2.0] 稳定性与降级
+
+1. 固化错误码分类：至少覆盖 `VALIDATION_ERROR/WORKFLOW_ERROR/PERSISTENCE_ERROR/FILE_UPLOAD_ERROR/FILE_PARSE_ERROR`
+2. 检索空结果降级：仍返回可用报告（保守能力判断）
+3. 节点降级策略：`RiskAnalyzer/ImpactAnalyzer` 异常时写空区块继续返回；`ReportComposer` 异常仍标记 `FAILED`
+4. 日志与观测：补齐节点级耗时日志；保留模型级 latency/token/cost 日志
+
+## 5.5 [Updated v0.2.0] M3 完成定义（DoD）
+
+1. 历史查询不再是占位返回，真实分页与筛选可用
+2. 附件从上传到解析到并入预审输入形成闭环
+3. regenerate 支持版本链与附件输入联动
+4. 风险/影响节点异常不阻断主流程（按降级策略返回）
+5. 错误码与日志可支持联调和问题定位
 
 ---
 

@@ -1,4 +1,7 @@
 # CoProduct 后端里程碑验收清单（M1/M2/M3）
+> Version: v0.2.0
+> Last Updated: 2026-03-11
+> Status: Updated
 
 ## 1. 验收原则
 
@@ -64,27 +67,42 @@
 
 ## 4. M3 验收（版本、文件、历史与稳定性）
 
+> Obsolete in v0.2.0:
+> 原 M3 验收项未区分“当前占位能力”和“目标闭环能力”，且文件链路字段命名与现网实现存在偏差（`file_id` vs `fileId`）。
+
+### 4.0 [Obsolete] 原 M3 验收（保留追溯）
+
+1. regenerate：创建新 session、版本 +1、parent_session_id 正确、重走 workflow
+2. 文件链路：上传返回稳定 file_id、元信息写库、白名单与大小限制、创建时读取文件并并入 normalized_request
+3. 历史查询：分页 + keyword/capabilityStatus 过滤 + 版本信息
+4. 错误与降级：空检索降级、Risk/Impact 异常降级、ReportComposer 异常 FAILED
+
 ## 4.1 regenerate
 
 1. 调用 `POST /api/prereview/{session_id}/regenerate` 后创建新 session
 2. 新 session 的 `version = 旧 version + 1`
 3. 新 session 的 `parent_session_id = 旧 session_id`
 4. 新 session 重走完整 workflow 并可查询结果
+5. regenerate 入参中的 `attachments.fileId` 能被后端接收并进入本次工作流输入
 
 ## 4.2 文件链路
 
-1. `POST /api/files/upload` 返回稳定 `file_id`
-2. 文件元信息写入 `uploaded_files`
+1. `POST /api/files/upload` 返回稳定 `fileId/fileName/fileSize/parseStatus`
+2. 文件元信息写入 `uploaded_files`（含 `mime_type/storage_key/parse_status`）
 3. 非白名单文件类型被拒绝
 4. 超出大小限制被拒绝
-5. 创建预审时可读取 file 文本并并入 `normalized_request`
+5. `parseStatus` 支持状态流转：`PENDING -> PARSING -> DONE|FAILED`
+6. create/regenerate 能读取已解析附件文本并并入 `normalized_request.merged_text`
+7. 附件解析失败返回或记录 `FILE_PARSE_ERROR`，并按降级策略保证主流程可控
 
 ## 4.3 历史查询
 
-1. `GET /api/history` 支持分页
+1. `GET /api/history` 支持真实分页（非占位空返回）
 2. `keyword` 过滤可用
-3. `capabilityStatus` 过滤可用
-4. 可返回版本信息（含 version）
+3. `capabilityStatus` 过滤可用（值域合法）
+4. 返回稳定字段：`sessionId/requestText/capabilityStatus/version/createdAt`
+5. 默认按 `createdAt` 倒序返回
+6. 分页边界正确：`page>=1`、`1<=pageSize<=100`
 
 ## 4.4 错误与降级
 
@@ -92,6 +110,8 @@
 2. `RiskAnalyzer` 异常时风险区块为空，不影响主流程返回
 3. `ImpactAnalyzer` 异常时影响区块为空，不影响主流程返回
 4. `ReportComposer` 异常时 session 标记 `FAILED`
+5. 错误码分类稳定：`VALIDATION_ERROR/WORKFLOW_ERROR/PERSISTENCE_ERROR/FILE_UPLOAD_ERROR/FILE_PARSE_ERROR`
+6. 日志可定位：至少包含 workflow 级事件与模型级 latency/token/cost
 
 ---
 
