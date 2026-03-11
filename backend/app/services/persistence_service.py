@@ -51,7 +51,7 @@ class PersistenceService:
         missing_items = report_payload.get("missingInfoItems", [])
         risks = report_payload.get("riskItems", [])
         impacts = report_payload.get("impactItems", [])
-        confidence = self._confidence_from_evidence(evidence)
+        confidence = capability.get("confidence") or self._confidence_from_evidence(evidence)
 
         return {
             "sessionId": session.id,

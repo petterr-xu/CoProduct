@@ -5,8 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import files_router, history_router, prereview_router
 from app.core.config import get_settings
-from app.core.db import Base, engine
+from app.core.db import Base, SessionLocal, engine
 from app.core.logging import configure_logging
+from app.model_client import build_model_client
+from app.rag import ensure_builtin_knowledge
 
 settings = get_settings()
 configure_logging()
@@ -27,6 +29,7 @@ app.add_middleware(
 @app.on_event("startup")
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
+    ensure_builtin_knowledge(SessionLocal, build_model_client(settings))
 
 
 @app.get("/healthz")
