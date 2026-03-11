@@ -91,3 +91,31 @@ class UploadedFileModel(Base):
     storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
     parse_status: Mapped[str] = mapped_column(String(32), nullable=False, default="PENDING")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class KnowledgeDocumentModel(Base):
+    __tablename__ = "knowledge_documents"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("kdoc"))
+    doc_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False, default="product_doc")
+    trust_level: Mapped[str] = mapped_column(String(32), nullable=False, default="MEDIUM")
+    module_tag: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class KnowledgeChunkModel(Base):
+    __tablename__ = "knowledge_chunks"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("kchk"))
+    doc_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("knowledge_documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    chunk_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    section_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tsv: Mapped[str | None] = mapped_column(Text, nullable=True)

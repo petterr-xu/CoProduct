@@ -1,6 +1,14 @@
 """Database models."""
 
-from app.models.prereview import EvidenceItemModel, ReportModel, RequestModel, SessionModel, UploadedFileModel
+from app.models.prereview import (
+    EvidenceItemModel,
+    KnowledgeChunkModel,
+    KnowledgeDocumentModel,
+    ReportModel,
+    RequestModel,
+    SessionModel,
+    UploadedFileModel,
+)
 
 __all__ = [
     "RequestModel",
@@ -8,4 +16,6 @@ __all__ = [
     "ReportModel",
     "EvidenceItemModel",
     "UploadedFileModel",
+    "KnowledgeDocumentModel",
+    "KnowledgeChunkModel",
 ]
