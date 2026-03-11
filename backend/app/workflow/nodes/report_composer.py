@@ -1,35 +1,25 @@
 from __future__ import annotations
 
+from app.model_client.base import ModelClient
+from app.schemas import ReportSchema
 from app.workflow.state import PreReviewState
 
 
 class ReportComposerNode:
+    def __init__(self, model_client: ModelClient) -> None:
+        self.model_client = model_client
+
     def __call__(self, state: PreReviewState) -> dict:
-        parsed = state.get("parsed_requirement", {})
-        capability = state.get("capability_judgement", {})
-        missing = state.get("missing_info_items", [])
-        risks = state.get("risk_items", [])
-        impacts = state.get("impact_items", [])
-        evidence = state.get("evidence_pack", [])
-
-        summary = (
-            f"目标：{parsed.get('goal') or '待补充'}；"
-            f"能力判断：{capability.get('status', 'NEED_MORE_INFO')}；"
-            f"待补充项：{len(missing)} 条。"
+        report = self.model_client.structured_invoke(
+            prompt_name="report_composer",
+            input_data={
+                "parsed_requirement": state.get("parsed_requirement", {}),
+                "capability_judgement": state.get("capability_judgement", {}),
+                "evidence_pack": state.get("evidence_pack", []),
+                "missing_info_items": state.get("missing_info_items", []),
+                "risk_items": state.get("risk_items", []),
+                "impact_items": state.get("impact_items", []),
+            },
+            schema=ReportSchema,
         )
-
-        report = {
-            "summary": summary,
-            "capabilityJudgement": capability,
-            "structuredDraft": parsed,
-            "evidence": evidence,
-            "missingInfoItems": missing,
-            "riskItems": risks,
-            "impactItems": impacts,
-            "nextSteps": [
-                "优先补齐高优先级缺失信息。",
-                "对高风险项补充约束后再进入正式评审。",
-            ],
-        }
         return {"report": report}
-

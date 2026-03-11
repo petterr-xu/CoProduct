@@ -1,29 +1,24 @@
 from __future__ import annotations
 
+from app.model_client.base import ModelClient
+from app.schemas import RetrievalPlanSchema
 from app.workflow.state import PreReviewState
 
 
 class RetrievalPlannerNode:
+    def __init__(self, model_client: ModelClient) -> None:
+        self.model_client = model_client
+
     def __call__(self, state: PreReviewState) -> dict:
-        parsed = state["parsed_requirement"]
-        normalized = state["normalized_request"]
-        requirement_text = normalized.get("requirement_text", "")
-
-        queries = [
-            f"{requirement_text} 能力",
-            f"{requirement_text} API",
-            f"{requirement_text} 限制 风险",
-        ]
-        if parsed.get("uncertain_points"):
-            queries.append(f"{requirement_text} 相似案例")
-
-        retrieval_plan = {
-            "queries": queries[:5],
-            "source_filters": {
+        normalized = state.get("normalized_request", {})
+        retrieval_plan = self.model_client.structured_invoke(
+            prompt_name="retrieval_planner",
+            input_data={
+                "requirement_text": normalized.get("requirement_text", ""),
+                "parsed_requirement": state.get("parsed_requirement", {}),
                 "business_domain": normalized.get("business_domain"),
                 "module_hint": normalized.get("module_hint"),
             },
-            "module_tags": parsed.get("business_objects", []),
-        }
+            schema=RetrievalPlanSchema,
+        )
         return {"retrieval_plan": retrieval_plan}
-
