@@ -4,7 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { apiClient, isApiClientError } from '@/lib/api-client';
 import { QUERY_KEYS } from '@/lib/constants';
-import { HistoryQuery } from '@/types';
+import { HistoryQuery, UploadedFileRef } from '@/types';
 
 export function useCreatePrereview() {
   return useMutation({
@@ -32,14 +32,21 @@ export function usePrereviewDetail(sessionId: string) {
 
 export function useRegeneratePrereview(sessionId: string) {
   return useMutation({
-    mutationFn: (payload: { additionalContext: string }) =>
-      apiClient.regeneratePrereview(sessionId, payload.additionalContext)
+    mutationFn: (payload: { additionalContext: string; attachments?: UploadedFileRef[] }) =>
+      apiClient.regeneratePrereview(sessionId, payload)
   });
 }
 
 export function useHistoryList(query: HistoryQuery) {
   return useQuery({
     queryKey: QUERY_KEYS.history(query.keyword ?? '', query.capabilityStatus ?? '', query.page, query.pageSize),
-    queryFn: () => apiClient.getHistory(query)
+    queryFn: () => apiClient.getHistory(query),
+    retry: (failureCount, error) => {
+      if (isApiClientError(error) && error.code === 'VALIDATION_ERROR') {
+        return false;
+      }
+      return failureCount < 2;
+    },
+    placeholderData: (previous) => previous
   });
 }

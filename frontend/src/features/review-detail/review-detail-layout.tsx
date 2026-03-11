@@ -77,8 +77,8 @@ export function ReviewDetailLayout({ sessionId }: Props) {
 
       <RegeneratePanel
         loading={regenerateMutation.isPending}
-        onSubmit={async (additionalContext) => {
-          const result = await regenerateMutation.mutateAsync({ additionalContext });
+        onSubmit={async ({ additionalContext, attachments }) => {
+          const result = await regenerateMutation.mutateAsync({ additionalContext, attachments });
           router.push(`/prereview/${result.sessionId}`);
         }}
       />
