@@ -1,10 +1,25 @@
-class HistoryService:
-    """History query service.
+from __future__ import annotations
 
-    M1/M1.5 keeps this as a placeholder to preserve endpoint contract.
-    M3 will replace this with repository-backed pagination/filtering.
-    """
+from app.repositories import PreReviewRepository
+
+
+class HistoryService:
+    """Read-model service for pre-review history list."""
+
+    def __init__(self, repo: PreReviewRepository) -> None:
+        self.repo = repo
 
     def list_history(self, *, keyword: str | None, capability_status: str | None, page: int, page_size: int) -> dict:
-        """Return empty paginated result while history persistence is not implemented."""
-        return {"total": 0, "page": page, "pageSize": page_size, "items": []}
+        """Return paginated history items filtered by keyword and capability status."""
+        total, items = self.repo.list_history(
+            keyword=keyword,
+            capability_status=capability_status,
+            page=page,
+            page_size=page_size,
+        )
+        return {
+            "total": total,
+            "page": page,
+            "pageSize": page_size,
+            "items": items,
+        }

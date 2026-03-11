@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from sqlalchemy import Select, desc, select
+from sqlalchemy import Select, desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import EvidenceItemModel, ReportModel, RequestModel, SessionModel, UploadedFileModel
@@ -147,3 +147,79 @@ class PreReviewRepository:
         self.db.add(item)
         self.db.flush()
         return item
+
+    def get_uploaded_file(self, file_id: str) -> UploadedFileModel | None:
+        return self.db.get(UploadedFileModel, file_id)
+
+    def update_uploaded_file_parse_status(self, file_id: str, parse_status: str) -> UploadedFileModel | None:
+        item = self.db.get(UploadedFileModel, file_id)
+        if item is None:
+            return None
+        item.parse_status = parse_status
+        self.db.add(item)
+        self.db.flush()
+        return item
+
+    def list_history(
+        self,
+        *,
+        keyword: str | None,
+        capability_status: str | None,
+        page: int,
+        page_size: int,
+    ) -> tuple[int, list[dict]]:
+        filters = []
+        if keyword:
+            pattern = f"%{keyword.strip()}%"
+            filters.append(
+                or_(
+                    RequestModel.requirement_text.ilike(pattern),
+                    RequestModel.background_text.ilike(pattern),
+                )
+            )
+        if capability_status:
+            filters.append(ReportModel.capability_status == capability_status)
+
+        total_stmt = (
+            select(func.count(SessionModel.id))
+            .select_from(SessionModel)
+            .join(RequestModel, SessionModel.request_id == RequestModel.id)
+            .outerjoin(ReportModel, ReportModel.session_id == SessionModel.id)
+        )
+        if filters:
+            total_stmt = total_stmt.where(*filters)
+        total = int(self.db.execute(total_stmt).scalar_one() or 0)
+
+        query_stmt = (
+            select(
+                SessionModel.id.label("session_id"),
+                SessionModel.version,
+                SessionModel.started_at,
+                RequestModel.requirement_text,
+                ReportModel.capability_status,
+            )
+            .select_from(SessionModel)
+            .join(RequestModel, SessionModel.request_id == RequestModel.id)
+            .outerjoin(ReportModel, ReportModel.session_id == SessionModel.id)
+        )
+        if filters:
+            query_stmt = query_stmt.where(*filters)
+
+        rows = self.db.execute(
+            query_stmt
+            .order_by(desc(SessionModel.started_at))
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).all()
+
+        items = [
+            {
+                "sessionId": row.session_id,
+                "requestText": row.requirement_text,
+                "capabilityStatus": row.capability_status or "NEED_MORE_INFO",
+                "version": row.version,
+                "createdAt": row.started_at.isoformat() if row.started_at else "",
+            }
+            for row in rows
+        ]
+        return total, items
