@@ -11,3 +11,4 @@ frontend/out/
 frontend/.env.local
 backend/uploaded_files/
 **/*.tsbuildinfo
+.codex
