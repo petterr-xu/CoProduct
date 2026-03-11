@@ -1,5 +1,12 @@
 import { z } from 'zod';
 
+const uploadedFileSchema = z.object({
+  fileId: z.string(),
+  fileName: z.string(),
+  fileSize: z.number(),
+  parseStatus: z.enum(['PENDING', 'PARSING', 'DONE', 'FAILED'])
+});
+
 export const createReviewSchema = z.object({
   requirementText: z
     .string()
@@ -9,14 +16,7 @@ export const createReviewSchema = z.object({
   businessDomain: z.string().max(100, '业务域长度过长').optional().or(z.literal('')),
   moduleHint: z.string().max(100, '模块提示长度过长').optional().or(z.literal('')),
   attachments: z
-    .array(
-      z.object({
-        fileId: z.string(),
-        fileName: z.string(),
-        fileSize: z.number(),
-        parseStatus: z.string().optional()
-      })
-    )
+    .array(uploadedFileSchema)
     .max(5, '最多上传 5 个附件')
     .optional()
 });

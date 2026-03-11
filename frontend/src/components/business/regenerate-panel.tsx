@@ -2,20 +2,26 @@
 
 import { useState } from 'react';
 
+import { FileUploader } from '@/components/base/file-uploader';
 import { SubmitButton } from '@/components/base/submit-button';
 import { regenerateSchema } from '@/schemas/regenerate';
+import { UploadedFileRef } from '@/types';
 
 type Props = {
-  onSubmit: (additionalContext: string) => Promise<void>;
+  onSubmit: (payload: { additionalContext: string; attachments: UploadedFileRef[] }) => Promise<void>;
   loading?: boolean;
 };
 
 export function RegeneratePanel({ onSubmit, loading }: Props) {
   const [text, setText] = useState('');
+  const [attachments, setAttachments] = useState<UploadedFileRef[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const validate = (value: string) => {
-    const parsed = regenerateSchema.safeParse({ additionalContext: value.trim() });
+  const validate = (value: string, files: UploadedFileRef[]) => {
+    const parsed = regenerateSchema.safeParse({
+      additionalContext: value.trim(),
+      attachments: files
+    });
     return parsed.success ? null : parsed.error.issues[0]?.message ?? '输入不合法';
   };
 
@@ -30,23 +36,37 @@ export function RegeneratePanel({ onSubmit, loading }: Props) {
           const nextText = e.target.value;
           setText(nextText);
           if (errorMessage) {
-            setErrorMessage(validate(nextText));
+            setErrorMessage(validate(nextText, attachments));
           }
         }}
       />
       {errorMessage ? <p className='mt-2 text-xs text-danger'>{errorMessage}</p> : null}
+
+      <div className='mt-3 space-y-1'>
+        <p className='text-sm font-medium'>补充附件（可选）</p>
+        <FileUploader
+          files={attachments}
+          onChange={(files) => {
+            setAttachments(files);
+            if (errorMessage) {
+              setErrorMessage(validate(text, files));
+            }
+          }}
+        />
+      </div>
+
       <div className='mt-3'>
         <SubmitButton
           loading={loading}
           onClick={async (e) => {
             e.preventDefault();
-            const validationError = validate(text);
+            const validationError = validate(text, attachments);
             if (validationError) {
               setErrorMessage(validationError);
               return;
             }
             setErrorMessage(null);
-            await onSubmit(text.trim());
+            await onSubmit({ additionalContext: text.trim(), attachments });
           }}
         >
           重新生成

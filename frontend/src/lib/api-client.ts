@@ -1,6 +1,7 @@
 import {
   CapabilityStatus,
   CreatePreReviewForm,
+  FileParseStatus,
   HistoryItem,
   HistoryListResponse,
   HistoryQuery,
@@ -12,6 +13,7 @@ import {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
 const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN ?? 'dev-token';
+const REQUEST_TIMEOUT_MS = 15_000;
 
 type ApiError = {
   error_code?: string;
@@ -39,8 +41,15 @@ export function isApiClientError(error: unknown): error is ApiClientError {
 
 export function getApiErrorMessage(error: unknown, fallback = '请求失败，请稍后重试') {
   if (isApiClientError(error)) {
+    if (error.code === 'FILE_UPLOAD_ERROR') return '文件上传失败，请检查文件类型和大小限制。';
+    if (error.code === 'FILE_PARSE_ERROR') return '文件解析失败，可删除后重传，或忽略该附件继续。';
+    if (error.code === 'WORKFLOW_ERROR') return '预审流程执行失败，请稍后重试。';
+    if (error.code === 'VALIDATION_ERROR') return '请求参数不合法，请检查输入内容。';
+    if (error.code === 'PERSISTENCE_ERROR') return '结果保存失败，请稍后重试。';
     if (error.httpStatus === 401) return '鉴权失败，请检查 API Token。';
     if (error.httpStatus === 404 || error.status === 'NOT_FOUND') return '资源不存在或已被删除。';
+    if (error.httpStatus === 0) return '网络异常，请检查前后端服务是否启动。';
+    if (error.httpStatus === 408) return '请求超时，请稍后重试。';
     if (error.httpStatus >= 500) return '服务暂时不可用，请稍后重试。';
     return error.message || fallback;
   }
@@ -56,6 +65,7 @@ const CAPABILITY_STATUS_SET = new Set<CapabilityStatus>([
   'NEED_MORE_INFO'
 ]);
 const CONFIDENCE_SET = new Set(['high', 'medium', 'low']);
+const FILE_PARSE_STATUS_SET = new Set<FileParseStatus>(['PENDING', 'PARSING', 'DONE', 'FAILED']);
 
 function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
@@ -92,6 +102,14 @@ function normalizeConfidence(value: unknown): 'high' | 'medium' | 'low' | null {
     return text as 'high' | 'medium' | 'low';
   }
   return null;
+}
+
+function normalizeFileParseStatus(value: unknown): FileParseStatus {
+  const text = asString(value).toUpperCase();
+  if (FILE_PARSE_STATUS_SET.has(text as FileParseStatus)) {
+    return text as FileParseStatus;
+  }
+  return 'PENDING';
 }
 
 function normalizeReviewDetail(payload: unknown): PreReviewReportView {
@@ -171,15 +189,23 @@ function normalizeHistoryResponse(payload: unknown): HistoryListResponse {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${API_TOKEN}`,
-      ...(init?.headers ?? {})
-    },
-    cache: 'no-store'
-  });
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${API_TOKEN}`,
+        ...(init?.headers ?? {})
+      },
+      cache: 'no-store'
+    });
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw error;
+    }
+    throw new ApiClientError('网络异常，请检查服务是否可访问。', { httpStatus: 0 });
+  }
 
   if (!response.ok) {
     let detail: ApiError | undefined;
@@ -200,6 +226,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new ApiClientError('请求超时，请稍后重试。', { httpStatus: 408 });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export const apiClient = {
   createPrereview(payload: CreatePreReviewForm) {
     return request<{ sessionId: string; status: string }>('/api/prereview', {
@@ -211,18 +252,31 @@ export const apiClient = {
     const raw = await request<unknown>(`/api/prereview/${sessionId}`);
     return normalizeReviewDetail(raw);
   },
-  regeneratePrereview(sessionId: string, additionalContext: string, attachments: UploadedFileRef[] = []) {
+  regeneratePrereview(
+    sessionId: string,
+    payload: {
+      additionalContext: string;
+      attachments?: UploadedFileRef[];
+    }
+  ) {
+    const trimmedContext = payload.additionalContext.trim();
+    const attachments = payload.attachments ?? [];
     return request<{ sessionId: string; status: string }>(`/api/prereview/${sessionId}/regenerate`, {
       method: 'POST',
-      body: JSON.stringify({ additionalContext, attachments: attachments.map((f) => ({ fileId: f.fileId })) })
+      body: JSON.stringify({
+        additionalContext: trimmedContext,
+        attachments: attachments.map((f) => ({ fileId: f.fileId }))
+      })
     });
   },
   async getHistory(query: HistoryQuery) {
+    const page = Math.max(1, Math.trunc(query.page));
+    const pageSize = Math.min(100, Math.max(1, Math.trunc(query.pageSize)));
     const params = new URLSearchParams();
     if (query.keyword) params.set('keyword', query.keyword);
     if (query.capabilityStatus) params.set('capabilityStatus', query.capabilityStatus);
-    params.set('page', String(query.page));
-    params.set('pageSize', String(query.pageSize));
+    params.set('page', String(page));
+    params.set('pageSize', String(pageSize));
     const raw = await request<unknown>(`/api/history?${params.toString()}`);
     return normalizeHistoryResponse(raw);
   },
@@ -230,13 +284,21 @@ export const apiClient = {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(`${API_BASE_URL}/api/files/upload`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${API_TOKEN}`
-      },
-      body: formData
-    });
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(`${API_BASE_URL}/api/files/upload`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${API_TOKEN}`
+        },
+        body: formData
+      });
+    } catch (error) {
+      if (error instanceof ApiClientError) {
+        throw error;
+      }
+      throw new ApiClientError('网络异常，请检查服务是否可访问。', { httpStatus: 0 });
+    }
 
     if (!response.ok) {
       let detail: ApiError | undefined;
@@ -253,6 +315,12 @@ export const apiClient = {
       });
     }
 
-    return (await response.json()) as UploadedFileRef;
+    const raw = (await response.json()) as Record<string, unknown>;
+    return {
+      fileId: asString(raw.fileId),
+      fileName: asString(raw.fileName),
+      fileSize: asNumber(raw.fileSize),
+      parseStatus: normalizeFileParseStatus(raw.parseStatus)
+    };
   }
 };

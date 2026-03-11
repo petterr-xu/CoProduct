@@ -11,10 +11,12 @@ import { getApiErrorMessage } from '@/lib/api-client';
 import { CapabilityStatus } from '@/types';
 
 export function HistoryView() {
+  const [keywordInput, setKeywordInput] = useState('');
+  const [statusInput, setStatusInput] = useState<CapabilityStatus | ''>('');
   const [keyword, setKeyword] = useState('');
   const [capabilityStatus, setCapabilityStatus] = useState<CapabilityStatus | ''>('');
   const [page, setPage] = useState(1);
-  const pageSize = 20;
+  const [pageSize, setPageSize] = useState(20);
 
   const query = useHistoryList({
     keyword: keyword || undefined,
@@ -29,20 +31,21 @@ export function HistoryView() {
         className='grid gap-3 rounded-card border border-black/10 bg-panel p-4 md:grid-cols-[1fr_220px_auto]'
         onSubmit={(e) => {
           e.preventDefault();
+          setKeyword(keywordInput.trim());
+          setCapabilityStatus(statusInput);
           setPage(1);
-          void query.refetch();
         }}
       >
         <input
           className='w-full rounded-md border border-black/20 bg-white px-3 py-2 text-sm outline-none focus:border-black/50'
           placeholder='搜索需求关键字'
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
+          value={keywordInput}
+          onChange={(e) => setKeywordInput(e.target.value)}
         />
         <select
           className='rounded-md border border-black/20 bg-white px-3 py-2 text-sm outline-none focus:border-black/50'
-          value={capabilityStatus}
-          onChange={(e) => setCapabilityStatus(e.target.value as CapabilityStatus | '')}
+          value={statusInput}
+          onChange={(e) => setStatusInput(e.target.value as CapabilityStatus | '')}
         >
           <option value=''>全部状态</option>
           <option value='SUPPORTED'>SUPPORTED</option>
@@ -62,6 +65,19 @@ export function HistoryView() {
           共 {query.data?.total ?? 0} 条 · 第 {query.data?.page ?? 1} 页
         </span>
         <div className='flex items-center gap-2'>
+          <select
+            className='rounded border border-black/20 px-2 py-1 text-xs'
+            value={pageSize}
+            onChange={(e) => {
+              const nextSize = Number(e.target.value);
+              setPageSize(nextSize);
+              setPage(1);
+            }}
+          >
+            <option value={20}>20 / 页</option>
+            <option value={50}>50 / 页</option>
+            <option value={100}>100 / 页</option>
+          </select>
           <button
             className='rounded border border-black/20 px-2 py-1 disabled:opacity-50'
             disabled={page <= 1}
@@ -71,7 +87,7 @@ export function HistoryView() {
           </button>
           <button
             className='rounded border border-black/20 px-2 py-1 disabled:opacity-50'
-            disabled={(query.data?.items.length ?? 0) < pageSize}
+            disabled={(query.data?.total ?? 0) <= page * pageSize}
             onClick={() => setPage((p) => p + 1)}
           >
             下一页
