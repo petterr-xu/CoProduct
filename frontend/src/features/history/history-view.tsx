@@ -6,7 +6,7 @@ import { ErrorAlert } from '@/components/base/error-alert';
 import { LoadingSkeleton } from '@/components/base/loading-skeleton';
 import { SubmitButton } from '@/components/base/submit-button';
 import { HistoryList } from '@/components/business/history-list';
-import { useHistoryList } from '@/hooks/use-review-api';
+import { useHistoryList } from '@/hooks/use-prereview-api';
 import { getApiErrorMessage } from '@/lib/api-client';
 import { CapabilityStatus } from '@/types';
 

@@ -33,7 +33,7 @@ export const SESSION_STATUS_LABEL_MAP: Record<SessionStatus, string> = {
 };
 
 export const QUERY_KEYS = {
-  reviewDetail: (sessionId: string) => ['review-detail', sessionId] as const,
+  prereviewDetail: (sessionId: string) => ['prereview-detail', sessionId] as const,
   history: (keyword: string, capabilityStatus: string, page: number, pageSize: number) =>
     ['history', keyword, capabilityStatus, page, pageSize] as const
 };

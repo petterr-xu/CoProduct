@@ -16,7 +16,7 @@ import { RiskListCard } from '@/components/business/risk-list-card';
 import { StructuredRequirementCard } from '@/components/business/structured-requirement-card';
 import { SummaryCard } from '@/components/business/summary-card';
 import { UncertaintiesCard } from '@/components/business/uncertainties-card';
-import { useRegenerateReview, useReviewDetail } from '@/hooks/use-review-api';
+import { usePrereviewDetail, useRegeneratePrereview } from '@/hooks/use-prereview-api';
 import { getApiErrorMessage, isApiClientError } from '@/lib/api-client';
 
 type Props = {
@@ -25,8 +25,8 @@ type Props = {
 
 export function ReviewDetailLayout({ sessionId }: Props) {
   const router = useRouter();
-  const detailQuery = useReviewDetail(sessionId);
-  const regenerateMutation = useRegenerateReview(sessionId);
+  const detailQuery = usePrereviewDetail(sessionId);
+  const regenerateMutation = useRegeneratePrereview(sessionId);
 
   if (detailQuery.isLoading) {
     return <LoadingSkeleton />;
@@ -79,7 +79,7 @@ export function ReviewDetailLayout({ sessionId }: Props) {
         loading={regenerateMutation.isPending}
         onSubmit={async (additionalContext) => {
           const result = await regenerateMutation.mutateAsync({ additionalContext });
-          router.push(`/review/${result.sessionId}`);
+          router.push(`/prereview/${result.sessionId}`);
         }}
       />
       {regenerateMutation.error ? <ErrorAlert title='重新生成失败' message={getApiErrorMessage(regenerateMutation.error)} /> : null}

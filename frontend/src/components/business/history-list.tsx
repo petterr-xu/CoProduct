@@ -27,7 +27,7 @@ export function HistoryList({ items }: Props) {
             <span>{formatDateTime(item.createdAt)}</span>
           </div>
           <div className='mt-3'>
-            <Link className='text-sm text-info underline-offset-2 hover:underline' href={`/review/${item.sessionId}`}>
+            <Link className='text-sm text-info underline-offset-2 hover:underline' href={`/prereview/${item.sessionId}`}>
               查看详情
             </Link>
           </div>

@@ -8,7 +8,7 @@ import { useForm } from 'react-hook-form';
 import { ErrorAlert } from '@/components/base/error-alert';
 import { FileUploader } from '@/components/base/file-uploader';
 import { SubmitButton } from '@/components/base/submit-button';
-import { useCreatePreReview } from '@/hooks/use-review-api';
+import { useCreatePrereview } from '@/hooks/use-prereview-api';
 import { getApiErrorMessage } from '@/lib/api-client';
 import { createReviewSchema, CreateReviewSchema } from '@/schemas/create-review';
 import { useCreateReviewDraftStore } from '@/stores/create-review-draft';
@@ -20,7 +20,7 @@ const EXAMPLE_TEXT =
 
 export function CreateReviewForm() {
   const router = useRouter();
-  const mutation = useCreatePreReview();
+  const mutation = useCreatePrereview();
   const draftStore = useCreateReviewDraftStore();
 
   const defaults = useMemo(
@@ -83,7 +83,7 @@ export function CreateReviewForm() {
       moduleHint: values.moduleHint,
       attachments: values.attachments
     });
-    router.push(`/review/${result.sessionId}`);
+    router.push(`/prereview/${result.sessionId}`);
   });
 
   return (

@@ -201,17 +201,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const apiClient = {
-  createPreReview(payload: CreatePreReviewForm) {
+  createPrereview(payload: CreatePreReviewForm) {
     return request<{ sessionId: string; status: string }>('/api/prereview', {
       method: 'POST',
       body: JSON.stringify(payload)
     });
   },
-  async getReviewDetail(sessionId: string) {
+  async getPrereviewDetail(sessionId: string) {
     const raw = await request<unknown>(`/api/prereview/${sessionId}`);
     return normalizeReviewDetail(raw);
   },
-  regenerateReview(sessionId: string, additionalContext: string, attachments: UploadedFileRef[] = []) {
+  regeneratePrereview(sessionId: string, additionalContext: string, attachments: UploadedFileRef[] = []) {
     return request<{ sessionId: string; status: string }>(`/api/prereview/${sessionId}/regenerate`, {
       method: 'POST',
       body: JSON.stringify({ additionalContext, attachments: attachments.map((f) => ({ fileId: f.fileId })) })

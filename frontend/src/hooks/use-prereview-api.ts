@@ -6,16 +6,16 @@ import { apiClient, isApiClientError } from '@/lib/api-client';
 import { QUERY_KEYS } from '@/lib/constants';
 import { HistoryQuery } from '@/types';
 
-export function useCreatePreReview() {
+export function useCreatePrereview() {
   return useMutation({
-    mutationFn: apiClient.createPreReview
+    mutationFn: apiClient.createPrereview
   });
 }
 
-export function useReviewDetail(sessionId: string) {
+export function usePrereviewDetail(sessionId: string) {
   return useQuery({
-    queryKey: QUERY_KEYS.reviewDetail(sessionId),
-    queryFn: () => apiClient.getReviewDetail(sessionId),
+    queryKey: QUERY_KEYS.prereviewDetail(sessionId),
+    queryFn: () => apiClient.getPrereviewDetail(sessionId),
     retry: (failureCount, error) => {
       if (isApiClientError(error) && (error.status === 'NOT_FOUND' || error.httpStatus === 404)) {
         return false;
@@ -30,10 +30,10 @@ export function useReviewDetail(sessionId: string) {
   });
 }
 
-export function useRegenerateReview(sessionId: string) {
+export function useRegeneratePrereview(sessionId: string) {
   return useMutation({
     mutationFn: (payload: { additionalContext: string }) =>
-      apiClient.regenerateReview(sessionId, payload.additionalContext)
+      apiClient.regeneratePrereview(sessionId, payload.additionalContext)
   });
 }
 
