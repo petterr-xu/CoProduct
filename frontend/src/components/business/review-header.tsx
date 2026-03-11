@@ -1,4 +1,5 @@
 import { SectionCard } from '@/components/base/section-card';
+import { SessionStatusBadge } from '@/components/base/session-status-badge';
 import { PreReviewReportView } from '@/types';
 
 type Props = {
@@ -15,8 +16,9 @@ export function ReviewHeader({ data }: Props) {
         <p>
           <span className='font-semibold'>Version:</span> v{data.version}
         </p>
-        <p>
-          <span className='font-semibold'>Status:</span> {data.status}
+        <p className='flex items-center gap-2'>
+          <span className='font-semibold'>Status:</span>
+          <SessionStatusBadge status={data.status} />
         </p>
         <p>
           <span className='font-semibold'>Parent:</span> {data.parentSessionId ?? '-'}
