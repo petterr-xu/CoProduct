@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from app.core.config import Settings
 from app.core.logging import log_event
 from app.repositories import PreReviewRepository
+from app.services.attachment_service import AttachmentService
 from app.services.persistence_service import PersistenceService
 from app.services.session_service import SessionService
 from app.workflow import PreReviewState, PreReviewWorkflow
@@ -44,6 +45,7 @@ class PreReviewService:
         self.repo = repo
         self.session_service = SessionService(repo)
         self.persistence_service = PersistenceService(repo)
+        self.attachment_service = AttachmentService(settings=settings, repo=repo)
         self.workflow = workflow or PreReviewWorkflow(settings)
 
     def create_prereview(self, payload: PreReviewCreateInput) -> dict:
@@ -55,20 +57,22 @@ class PreReviewService:
             module_hint=payload.module_hint,
         )
         session_id, version = self.session_service.create_session(request.id)
+        attachment_text = self.attachment_service.merge_attachment_text(payload.attachments)
 
         initial_state: PreReviewState = {
             "session_id": session_id,
             "parent_session_id": None,
             "request_id": request.id,
             "version": version,
-            "normalized_request": {
-                "requirement_text": payload.requirement_text,
-                "background_text": payload.background_text or "",
-                "business_domain": payload.business_domain,
-                "module_hint": payload.module_hint,
-                "attachments": payload.attachments,
-                "additional_context": "",
-            },
+            "normalized_request": self._build_normalized_request(
+                requirement_text=payload.requirement_text,
+                background_text=payload.background_text or "",
+                business_domain=payload.business_domain,
+                module_hint=payload.module_hint,
+                attachments=payload.attachments,
+                additional_context="",
+                attachment_text=attachment_text,
+            ),
             "parsed_requirement": {},
             "retrieval_plan": {},
             "retrieved_candidates": [],
@@ -118,20 +122,22 @@ class PreReviewService:
             request_id=request.id,
             parent_session_id=parent_session.id,
         )
+        attachment_text = self.attachment_service.merge_attachment_text(payload.attachments)
 
         initial_state: PreReviewState = {
             "session_id": session_id,
             "parent_session_id": parent_session.id,
             "request_id": request.id,
             "version": version,
-            "normalized_request": {
-                "requirement_text": request.requirement_text,
-                "background_text": request.background_text or "",
-                "business_domain": request.business_domain,
-                "module_hint": request.module_hint,
-                "attachments": payload.attachments,
-                "additional_context": payload.additional_context or "",
-            },
+            "normalized_request": self._build_normalized_request(
+                requirement_text=request.requirement_text,
+                background_text=request.background_text or "",
+                business_domain=request.business_domain,
+                module_hint=request.module_hint,
+                attachments=payload.attachments,
+                additional_context=payload.additional_context or "",
+                attachment_text=attachment_text,
+            ),
             "parsed_requirement": {},
             "retrieval_plan": {},
             "retrieved_candidates": [],
@@ -172,3 +178,24 @@ class PreReviewService:
     def get_prereview(self, session_id: str) -> dict | None:
         """Return frontend-facing view model for a session."""
         return self.persistence_service.get_session_result(session_id)
+
+    @staticmethod
+    def _build_normalized_request(
+        *,
+        requirement_text: str,
+        background_text: str,
+        business_domain: str | None,
+        module_hint: str | None,
+        attachments: list[dict],
+        additional_context: str,
+        attachment_text: str,
+    ) -> dict:
+        return {
+            "requirement_text": requirement_text,
+            "background_text": background_text,
+            "business_domain": business_domain,
+            "module_hint": module_hint,
+            "attachments": attachments,
+            "additional_context": additional_context,
+            "attachment_text": attachment_text,
+        }

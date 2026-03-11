@@ -4,6 +4,7 @@ Keep API handlers dependent on these service classes/contracts instead of
 directly invoking repositories or workflow internals.
 """
 
+from app.services.attachment_service import AttachmentService
 from app.services.file_service import FileService
 from app.services.history_service import HistoryService
 from app.services.persistence_service import PersistenceService
@@ -14,6 +15,7 @@ __all__ = [
     "PreReviewCreateInput",
     "PreReviewRegenerateInput",
     "PreReviewService",
+    "AttachmentService",
     "SessionService",
     "PersistenceService",
     "HistoryService",

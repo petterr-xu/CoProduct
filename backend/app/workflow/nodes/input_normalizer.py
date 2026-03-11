@@ -14,12 +14,15 @@ class InputNormalizerNode:
         requirement_text = clean_text(raw.get("requirement_text", ""))
         background_text = clean_text(raw.get("background_text", ""))
         additional_context = clean_text(raw.get("additional_context", ""))
+        attachment_text = clean_text(raw.get("attachment_text", ""))
 
         merged = requirement_text
         if background_text:
             merged = f"{merged}\n背景：{background_text}"
         if additional_context:
             merged = f"{merged}\n补充：{additional_context}"
+        if attachment_text:
+            merged = f"{merged}\n附件信息：{attachment_text}"
 
         merged = truncate_text(merged, self.settings.normalized_text_limit)
 
@@ -31,7 +34,7 @@ class InputNormalizerNode:
                 "business_domain": raw.get("business_domain"),
                 "module_hint": raw.get("module_hint"),
                 "attachments": raw.get("attachments", []),
+                "attachment_text": attachment_text,
                 "merged_text": merged,
             }
         }
-
