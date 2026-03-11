@@ -7,12 +7,13 @@ export type CapabilityStatus =
 export type SessionStatus = 'PROCESSING' | 'DONE' | 'FAILED';
 export type ReviewViewStatus = SessionStatus | 'NOT_FOUND';
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
+export type FileParseStatus = 'PENDING' | 'PARSING' | 'DONE' | 'FAILED';
 
 export type UploadedFileRef = {
   fileId: string;
   fileName: string;
   fileSize: number;
-  parseStatus?: string;
+  parseStatus: FileParseStatus;
 };
 
 export type CreatePreReviewForm = {
