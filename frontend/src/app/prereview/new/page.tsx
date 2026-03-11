@@ -1,9 +1,22 @@
+import Link from 'next/link';
+
 import { PageContainer } from '@/components/layout/page-container';
 import { CreateReviewForm } from '@/features/create-review/create-review-form';
 
 export default function NewPrereviewPage() {
   return (
-    <PageContainer title='新建预审' subtitle='提交需求描述并生成结构化预审结果'>
+    <PageContainer
+      title='新建预审'
+      subtitle='提交需求描述并生成结构化预审结果'
+      actions={
+        <Link
+          href='/history'
+          className='rounded-md border border-black/20 bg-white px-3 py-1.5 text-sm hover:border-black/40'
+        >
+          查看历史
+        </Link>
+      }
+    >
       <div className='grid gap-4 lg:grid-cols-[1.6fr_1fr]'>
         <section className='rounded-card border border-black/10 bg-panel p-4 shadow-panel'>
           <CreateReviewForm />

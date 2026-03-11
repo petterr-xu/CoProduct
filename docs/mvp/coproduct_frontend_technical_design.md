@@ -1,5 +1,5 @@
 # CoProduct 前端技术设计方案（确定版）
-> Version: v0.2.0
+> Version: v0.2.1
 > Last Updated: 2026-03-11
 > Status: Updated
 
@@ -22,7 +22,8 @@ CoProduct 前端固定采用：
 - 表单：React Hook Form + Zod
 - 请求层：统一 API Client
 - 部署：Vercel
-- 页面数量：3 页
+- 页面数量：4 页（M3.1 更新后）
+  - 统一入口页（Dashboard）
   - 新建预审页
   - 结果页
   - 历史记录页
@@ -70,6 +71,17 @@ CoProduct 前端固定采用：
 - 二次生成弹层
 
 ## 3. 信息架构
+
+### 3.0 页面入口（M3.1 更新）
+
+> Obsolete in v0.2.1:
+> 原设计将 `/` 固定为重定向页，用户只能被动跳入新建页，跨页面跳转效率较低。
+
+Updated:
+
+- `/` 作为统一入口页（Dashboard）
+- 首页提供快速入口：`新建预审`、`历史记录`
+- 首页可展示“最近访问会话”快捷跳转（可选能力）
 
 ### 3.1 页面 1：新建预审页 `/review/new`
 
@@ -229,6 +241,12 @@ type HistoryQuery = {
 
 ```text
 app/
+  page.tsx
+  prereview/
+    new/
+      page.tsx
+    [sessionId]/
+      page.tsx
   review/
     new/
       page.tsx
@@ -237,14 +255,28 @@ app/
   history/
     page.tsx
   layout.tsx
-  page.tsx
 ```
 
 规则：
 
-- `/` 跳转到 `/review/new`
+> Obsolete in v0.2.1:
+> `/` 跳转到 `/review/new`
+
+Updated:
+
+- `/` 作为统一入口页（非自动跳转）
+- 核心路由使用 `/prereview/*`
+- `/review/*` 保留为兼容重定向路由
 - 不做后台管理路由
 - 不做复杂嵌套路由
+
+## 5.1 M3.1 导航壳（前端-only）
+
+1. 在 `app/layout.tsx` 下挂载轻量全局导航壳（App Shell）
+2. 导航项固定：`首页`、`新建预审`、`历史记录`
+3. 支持当前路由高亮，降低页面切换成本
+4. 详情页补局部快捷入口：`返回历史`、`新建预审`
+5. 不依赖后端新增接口，仅使用现有页面与 API
 
 ## 6. 状态管理设计
 
@@ -396,7 +428,7 @@ frontend/
 
 前端完成判定标准：
 
-1. 3 个页面可用
+1. 4 个页面可用（含统一入口页）
 2. 能发起预审并跳转结果页
 3. 能轮询结果状态
 4. 能展示报告 8 个区块
