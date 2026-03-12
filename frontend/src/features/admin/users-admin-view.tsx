@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 
 import { EmptyState } from '@/components/base/empty-state';
 import { ErrorAlert } from '@/components/base/error-alert';
@@ -25,6 +25,7 @@ const MEMBER_STATUS_OPTIONS: MemberStatus[] = ['INVITED', 'ACTIVE', 'SUSPENDED',
 
 export function UsersAdminView() {
   const currentUser = useAuthStore((state) => state.user);
+  const authContext = useAuthStore((state) => state.authContext);
 
   const [queryInput, setQueryInput] = useState('');
   const [permissionRoleInput, setPermissionRoleInput] = useState<Role | ''>('');
@@ -45,6 +46,7 @@ export function UsersAdminView() {
     role: 'MEMBER' as Role,
     orgId: ''
   });
+  const [createGuardError, setCreateGuardError] = useState<string | null>(null);
   const [roleDrafts, setRoleDrafts] = useState<Record<string, Role>>({});
   const [statusDrafts, setStatusDrafts] = useState<Record<string, MemberStatus>>({});
   const [functionalRoleDrafts, setFunctionalRoleDrafts] = useState<Record<string, string>>({});
@@ -81,22 +83,56 @@ export function UsersAdminView() {
   const currentPage = listQuery.data?.page ?? page;
 
   const functionalRoleOptions = functionalRolesQuery.data?.items ?? [];
+  const activeOrg = authContext?.activeOrg ?? null;
+  const availableOrgs = authContext?.availableOrgs ?? [];
+  const scopeMode = authContext?.scopeMode ?? 'ORG_SCOPED';
+  const isOrgScoped = scopeMode === 'ORG_SCOPED';
+  const hasOrgContext = isOrgScoped ? Boolean(activeOrg?.orgId) : Boolean(createForm.orgId.trim());
   const actorRole = currentUser?.role;
   const actorUserId = currentUser?.id;
 
+  useEffect(() => {
+    const defaultOrgId = activeOrg?.orgId ?? '';
+    setCreateForm((previous) => {
+      if (isOrgScoped) {
+        if (previous.orgId === defaultOrgId) return previous;
+        return { ...previous, orgId: defaultOrgId };
+      }
+      if (!previous.orgId && defaultOrgId) {
+        return { ...previous, orgId: defaultOrgId };
+      }
+      return previous;
+    });
+  }, [activeOrg?.orgId, isOrgScoped]);
+
+  useEffect(() => {
+    if (hasOrgContext) {
+      setCreateGuardError(null);
+    }
+  }, [hasOrgContext]);
+
   async function onCreateUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setCreateGuardError(null);
+
+    const targetOrgId = isOrgScoped ? activeOrg?.orgId ?? '' : createForm.orgId.trim();
+    if (!targetOrgId) {
+      setCreateGuardError('当前账号无可用组织，暂时无法创建成员，请联系管理员。');
+      return;
+    }
+
     try {
       await createMutation.mutateAsync({
         email: createForm.email.trim(),
         displayName: createForm.displayName.trim(),
         role: createForm.role,
-        orgId: createForm.orgId.trim() || undefined
+        orgId: targetOrgId
       });
       setCreateForm((previous) => ({
         ...previous,
         email: '',
-        displayName: ''
+        displayName: '',
+        orgId: isOrgScoped ? activeOrg?.orgId ?? previous.orgId : previous.orgId
       }));
       setPage(1);
     } catch {
@@ -139,6 +175,10 @@ export function UsersAdminView() {
     <div className='space-y-4'>
       <section className='rounded-card border border-black/10 bg-panel p-4'>
         <h2 className='text-sm font-semibold'>新增成员账号</h2>
+        <p className='mt-1 text-xs text-muted'>
+          当前组织：{activeOrg ? `${activeOrg.orgName} (${activeOrg.orgId})` : '无'} · 上下文模式：{scopeMode}
+        </p>
+        {!activeOrg ? <p className='mt-1 text-xs text-danger'>当前账号暂无可用组织，创建成员功能已禁用。</p> : null}
         <form className='mt-3 grid gap-3 md:grid-cols-4' onSubmit={(event) => void onCreateUser(event)}>
           <input
             required
@@ -166,16 +206,29 @@ export function UsersAdminView() {
               </option>
             ))}
           </select>
-          <input
-            placeholder='组织 ID（可选）'
+          <select
             className='rounded-md border border-black/20 bg-white px-3 py-2 text-sm outline-none focus:border-black/50'
             value={createForm.orgId}
             onChange={(event) => setCreateForm((p) => ({ ...p, orgId: event.target.value }))}
-          />
+            disabled={isOrgScoped || availableOrgs.length === 0}
+            title={isOrgScoped ? 'ORG_SCOPED 模式下组织由登录上下文固定' : undefined}
+          >
+            <option value='' disabled>
+              {availableOrgs.length === 0 ? '无可用组织' : '请选择组织'}
+            </option>
+            {availableOrgs.map((org) => (
+              <option key={org.orgId} value={org.orgId}>
+                {org.orgName} ({org.orgId})
+              </option>
+            ))}
+          </select>
           <div className='md:col-span-4'>
-            <SubmitButton loading={createMutation.isPending}>创建成员</SubmitButton>
+            <SubmitButton loading={createMutation.isPending} disabled={!hasOrgContext}>
+              创建成员
+            </SubmitButton>
           </div>
         </form>
+        {createGuardError ? <ErrorAlert title='组织上下文不可用' message={createGuardError} /> : null}
       </section>
 
       <section className='rounded-card border border-black/10 bg-panel p-4'>
