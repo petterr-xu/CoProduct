@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { ErrorAlert } from '@/components/base/error-alert';
 import { FileUploader } from '@/components/base/file-uploader';
 import { SubmitButton } from '@/components/base/submit-button';
 import { regenerateSchema } from '@/schemas/regenerate';
@@ -10,9 +11,10 @@ import { UploadedFileRef } from '@/types';
 type Props = {
   onSubmit: (payload: { additionalContext: string; attachments: UploadedFileRef[] }) => Promise<void>;
   loading?: boolean;
+  disabled?: boolean;
 };
 
-export function RegeneratePanel({ onSubmit, loading }: Props) {
+export function RegeneratePanel({ onSubmit, loading, disabled = false }: Props) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<UploadedFileRef[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -32,6 +34,7 @@ export function RegeneratePanel({ onSubmit, loading }: Props) {
         className='min-h-24 w-full rounded-md border border-black/20 p-3 text-sm outline-none ring-0 focus:border-black/50'
         placeholder='补充角色、范围、约束、性能要求等信息...'
         value={text}
+        disabled={disabled}
         onChange={(e) => {
           const nextText = e.target.value;
           setText(nextText);
@@ -46,6 +49,7 @@ export function RegeneratePanel({ onSubmit, loading }: Props) {
         <p className='text-sm font-medium'>补充附件（可选）</p>
         <FileUploader
           files={attachments}
+          disabled={disabled}
           onChange={(files) => {
             setAttachments(files);
             if (errorMessage) {
@@ -56,10 +60,13 @@ export function RegeneratePanel({ onSubmit, loading }: Props) {
       </div>
 
       <div className='mt-3'>
+        {disabled ? <ErrorAlert title='当前账号只读' message='VIEWER 角色不可触发重新生成。' /> : null}
         <SubmitButton
           loading={loading}
+          disabled={disabled}
           onClick={async (e) => {
             e.preventDefault();
+            if (disabled) return;
             const validationError = validate(text, attachments);
             if (validationError) {
               setErrorMessage(validationError);

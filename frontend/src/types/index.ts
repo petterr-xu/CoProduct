@@ -1,3 +1,29 @@
+export type Role = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
+export type UserStatus = 'ACTIVE' | 'DISABLED' | 'PENDING_INVITE';
+export type ApiKeyStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED';
+
+export type AuthUserView = {
+  id: string;
+  email: string;
+  displayName: string;
+  role: Role;
+  orgId: string;
+  status: UserStatus;
+};
+
+export type AuthTokenResponse = {
+  accessToken: string;
+  tokenType: 'Bearer';
+  expiresIn: number;
+  user: AuthUserView;
+};
+
+export type RefreshResponse = {
+  accessToken: string;
+  tokenType: 'Bearer';
+  expiresIn: number;
+};
+
 export type CapabilityStatus =
   | 'SUPPORTED'
   | 'PARTIALLY_SUPPORTED'

@@ -12,4 +12,3 @@ npm run dev
 ## Env
 
 - `NEXT_PUBLIC_API_BASE_URL`: backend base url
-- `NEXT_PUBLIC_API_TOKEN`: fixed api token for MVP

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 
+import { WriteAccess } from '@/components/auth/write-access';
 import { EmptyState } from '@/components/base/empty-state';
 import { ErrorAlert } from '@/components/base/error-alert';
 import { LoadingSkeleton } from '@/components/base/loading-skeleton';
@@ -20,14 +21,23 @@ export function HomeDashboard() {
   return (
     <div className='space-y-5'>
       <section className='grid gap-4 md:grid-cols-2'>
-        <Link
-          href='/prereview/new'
-          className='rounded-card border border-black/10 bg-panel p-5 shadow-panel transition hover:-translate-y-0.5'
+        <WriteAccess
+          fallback={
+            <section className='rounded-card border border-black/10 bg-panel p-5 shadow-panel'>
+              <h2 className='text-lg font-semibold'>发起新预审</h2>
+              <p className='mt-2 text-sm text-muted'>当前账号为只读角色，无法发起新预审。</p>
+            </section>
+          }
         >
-          <h2 className='text-lg font-semibold'>发起新预审</h2>
-          <p className='mt-2 text-sm text-muted'>提交需求描述、背景与附件，生成结构化预审结论。</p>
-          <p className='mt-4 text-sm font-medium text-info'>进入新建页 →</p>
-        </Link>
+          <Link
+            href='/prereview/new'
+            className='rounded-card border border-black/10 bg-panel p-5 shadow-panel transition hover:-translate-y-0.5'
+          >
+            <h2 className='text-lg font-semibold'>发起新预审</h2>
+            <p className='mt-2 text-sm text-muted'>提交需求描述、背景与附件，生成结构化预审结论。</p>
+            <p className='mt-4 text-sm font-medium text-info'>进入新建页 →</p>
+          </Link>
+        </WriteAccess>
 
         <Link
           href='/history'

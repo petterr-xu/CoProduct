@@ -9,6 +9,7 @@ import { FileParseStatus, UploadedFileRef } from '@/types';
 type Props = {
   files: UploadedFileRef[];
   onChange: (files: UploadedFileRef[]) => void;
+  disabled?: boolean;
 };
 
 const MAX_FILES = 5;
@@ -29,11 +30,12 @@ const FILE_STATUS_COLOR_MAP: Record<FileParseStatus, string> = {
   FAILED: 'border-red-200 bg-red-100 text-red-700'
 };
 
-export function FileUploader({ files, onChange }: Props) {
+export function FileUploader({ files, onChange, disabled = false }: Props) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
 
   async function handleSelect(inputFiles: FileList | null) {
+    if (disabled) return;
     if (!inputFiles || inputFiles.length === 0) return;
     setError('');
 
@@ -74,14 +76,25 @@ export function FileUploader({ files, onChange }: Props) {
   }
 
   function remove(fileId: string) {
+    if (disabled) return;
     onChange(files.filter((item) => item.fileId !== fileId));
   }
 
   return (
     <div className='space-y-2'>
-      <label className='inline-flex cursor-pointer rounded-md border border-black/20 bg-white px-3 py-2 text-sm font-medium'>
+      <label
+        className={`inline-flex rounded-md border border-black/20 bg-white px-3 py-2 text-sm font-medium ${
+          disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+        }`}
+      >
         {uploading ? '上传中...' : '选择附件'}
-        <input type='file' className='hidden' multiple onChange={(e) => void handleSelect(e.target.files)} />
+        <input
+          type='file'
+          className='hidden'
+          multiple
+          disabled={disabled}
+          onChange={(e) => void handleSelect(e.target.files)}
+        />
       </label>
       {error ? <p className='text-xs text-danger'>{error}</p> : null}
       <ul className='space-y-1'>
@@ -97,7 +110,12 @@ export function FileUploader({ files, onChange }: Props) {
                 {FILE_STATUS_LABEL_MAP[file.parseStatus]}
               </span>
             </div>
-            <button type='button' className='text-xs text-danger' onClick={() => remove(file.fileId)}>
+            <button
+              type='button'
+              disabled={disabled}
+              className='text-xs text-danger disabled:cursor-not-allowed disabled:opacity-60'
+              onClick={() => remove(file.fileId)}
+            >
               删除
             </button>
           </li>

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { WriteAccess } from '@/components/auth/write-access';
 import { PageContainer } from '@/components/layout/page-container';
 import { ReviewDetailLayout } from '@/features/review-detail/review-detail-layout';
 
@@ -21,12 +22,14 @@ export default async function PrereviewDetailPage({ params }: PageProps) {
           >
             返回历史
           </Link>
-          <Link
-            href='/prereview/new'
-            className='rounded-md border border-black/20 bg-white px-3 py-1.5 text-sm hover:border-black/40'
-          >
-            新建预审
-          </Link>
+          <WriteAccess>
+            <Link
+              href='/prereview/new'
+              className='rounded-md border border-black/20 bg-white px-3 py-1.5 text-sm hover:border-black/40'
+            >
+              新建预审
+            </Link>
+          </WriteAccess>
         </>
       }
     >
