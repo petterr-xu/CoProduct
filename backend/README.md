@@ -24,7 +24,7 @@ export COPRODUCT_UPLOAD_DIR="./uploaded_files"
 export COPRODUCT_AUTH_MODE="jwt"
 export COPRODUCT_BOOTSTRAP_OWNER_API_KEY="cpk_dev_local_bootstrap_key_change_me"
 
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+uvicorn app.main:app --reload --host localhost --port 8000
 ```
 
 
@@ -35,4 +35,3 @@ Use header:
 ```text
 Authorization: Bearer dev-token
 ```
-

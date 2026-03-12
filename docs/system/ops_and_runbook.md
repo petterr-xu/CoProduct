@@ -35,7 +35,7 @@ pip install -e .
 export COPRODUCT_DATABASE_URL="sqlite+pysqlite:///./coproduct.db"
 export COPRODUCT_API_TOKEN="dev-token"
 export COPRODUCT_UPLOAD_DIR="./uploaded_files"
-export COPRODUCT_CORS_ALLOW_ORIGINS="http://localhost:3000,http://127.0.0.1:3000"
+export COPRODUCT_CORS_ALLOW_ORIGINS="http://localhost:3000"
 ```
 
 ## 2.3 启动命令
@@ -66,7 +66,7 @@ npm install
 参考 `frontend/.env.example`，本地示例：
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 NEXT_PUBLIC_API_TOKEN=dev-token
 ```
 
