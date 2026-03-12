@@ -8,6 +8,7 @@ import { LoadingSkeleton } from '@/components/base/loading-skeleton';
 import { SubmitButton } from '@/components/base/submit-button';
 import { useAdminApiKeys, useAdminIssueApiKey, useAdminRevokeApiKey } from '@/hooks/use-admin-api';
 import { getApiErrorMessage } from '@/lib/api-client';
+import { API_KEY_STATUS_LABEL_MAP } from '@/lib/constants';
 import { formatDateTime } from '@/lib/utils';
 import { ApiKeyStatus, IssueApiKeyResponse } from '@/types';
 
@@ -132,7 +133,7 @@ export function ApiKeysAdminView() {
             <option value=''>全部状态</option>
             {API_KEY_STATUS_OPTIONS.map((value) => (
               <option key={value} value={value}>
-                {value}
+                {API_KEY_STATUS_LABEL_MAP[value]}
               </option>
             ))}
           </select>
@@ -169,7 +170,7 @@ export function ApiKeysAdminView() {
                     <p className='font-mono text-xs text-muted'>{item.keyPrefix}</p>
                   </td>
                   <td className='px-3 py-2 text-xs'>{item.userId}</td>
-                  <td className='px-3 py-2 text-xs'>{item.status}</td>
+                  <td className='px-3 py-2 text-xs'>{API_KEY_STATUS_LABEL_MAP[item.status]}</td>
                   <td className='px-3 py-2 text-xs'>{item.lastUsedAt ? formatDateTime(item.lastUsedAt) : '-'}</td>
                   <td className='px-3 py-2 text-xs'>{item.expiresAt ? formatDateTime(item.expiresAt) : '永不过期'}</td>
                   <td className='px-3 py-2'>

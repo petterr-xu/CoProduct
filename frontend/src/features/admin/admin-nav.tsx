@@ -7,7 +7,8 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
 const ADMIN_LINKS = [
-  { href: '/admin/users', label: '用户管理' },
+  { href: '/admin/users', label: '成员管理' },
+  { href: '/admin/functional-roles', label: '职能角色' },
   { href: '/admin/api-keys', label: 'API Key 管理' },
   { href: '/admin/audit-logs', label: '审计日志' }
 ] as const;

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { ReactNode, useMemo, useState } from 'react';
 
 import { authClient } from '@/lib/auth-client';
+import { ROLE_LABEL_MAP } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { isAdminRole, isWriteRole, useAuthStore } from '@/stores/auth-store';
 
@@ -89,7 +90,9 @@ export function AppShell({ children }: AppShellProps) {
             {user ? (
               <div className='ml-1 flex items-center gap-2 rounded-md border border-black/15 bg-white px-2.5 py-1.5 text-xs text-muted'>
                 <span>{user.displayName}</span>
-                <span className='rounded border border-black/10 bg-panel px-1.5 py-0.5 text-[10px] text-ink'>{user.role}</span>
+                <span className='rounded border border-black/10 bg-panel px-1.5 py-0.5 text-[10px] text-ink'>
+                  {ROLE_LABEL_MAP[user.role]}
+                </span>
                 <button
                   type='button'
                   disabled={isLoggingOut}
