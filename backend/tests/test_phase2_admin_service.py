@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from sqlalchemy import create_engine
+from dataclasses import replace
+
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import Settings
 from app.core.db import Base
 from app.core.user_context import CurrentUserContext
+from app.models import AuditLogModel
 from app.repositories import UserRepository
 from app.services import AdminServiceError, AdminUserService, AuthService, AuthServiceError
 
@@ -198,3 +201,66 @@ def test_revoke_api_key_for_self_is_forbidden() -> None:
             assert exc.error_code == "SELF_OPERATION_FORBIDDEN"
         else:
             raise AssertionError("Expected self revoke to be forbidden")
+
+
+def test_create_user_rejects_cross_org_assignment() -> None:
+    settings = _build_settings()
+    SessionLocal = _build_session_local()
+
+    with SessionLocal() as db:
+        repo = UserRepository(db)
+        auth_service = AuthService(settings=settings, repo=repo)
+        auth_service.ensure_bootstrap_identity()
+        repo.get_or_create_organization(org_id="org_other", name="Other Org")
+        db.commit()
+
+        owner_ctx = _build_owner_context(repo, settings)
+        admin_service = AdminUserService(repo=repo, api_key_pepper=settings.api_key_pepper)
+
+        try:
+            admin_service.create_user(
+                current_user=owner_ctx,
+                email="cross-org@phase2.local",
+                display_name="Cross Org",
+                role="MEMBER",
+                org_id="org_other",
+            )
+        except AdminServiceError as exc:
+            assert exc.error_code == "PERMISSION_DENIED"
+        else:
+            raise AssertionError("Expected cross-org user creation to be rejected")
+
+
+def test_create_user_requires_active_org_context() -> None:
+    settings = _build_settings()
+    SessionLocal = _build_session_local()
+
+    with SessionLocal() as db:
+        repo = UserRepository(db)
+        auth_service = AuthService(settings=settings, repo=repo)
+        auth_service.ensure_bootstrap_identity()
+        db.commit()
+
+        owner_ctx = _build_owner_context(repo, settings)
+        no_org_ctx = replace(owner_ctx, org_id="")
+        admin_service = AdminUserService(repo=repo, api_key_pepper=settings.api_key_pepper)
+
+        try:
+            admin_service.create_user(
+                current_user=no_org_ctx,
+                email="no-org@phase2.local",
+                display_name="No Org",
+                role="MEMBER",
+                org_id=None,
+            )
+        except AdminServiceError as exc:
+            assert exc.error_code == "NO_ACTIVE_ORG"
+        else:
+            raise AssertionError("Expected NO_ACTIVE_ORG when current user has no org context")
+
+        failed_audit = db.execute(
+            select(AuditLogModel)
+            .where(AuditLogModel.action == "ADMIN_CREATE_USER", AuditLogModel.result == "FAILED")
+            .limit(1)
+        ).scalar_one_or_none()
+        assert failed_audit is not None
