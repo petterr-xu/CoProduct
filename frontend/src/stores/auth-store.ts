@@ -42,3 +42,6 @@ export function isWriteRole(role: Role | null | undefined): boolean {
   return role === 'OWNER' || role === 'ADMIN' || role === 'MEMBER';
 }
 
+export function isAdminRole(role: Role | null | undefined): boolean {
+  return role === 'OWNER' || role === 'ADMIN';
+}

@@ -35,5 +35,14 @@ export const SESSION_STATUS_LABEL_MAP: Record<SessionStatus, string> = {
 export const QUERY_KEYS = {
   prereviewDetail: (sessionId: string) => ['prereview-detail', sessionId] as const,
   history: (keyword: string, capabilityStatus: string, page: number, pageSize: number) =>
-    ['history', keyword, capabilityStatus, page, pageSize] as const
+    ['history', keyword, capabilityStatus, page, pageSize] as const,
+  adminUsersRoot: ['admin-users'] as const,
+  adminUsers: (query: string, role: string, status: string, page: number, pageSize: number) =>
+    ['admin-users', query, role, status, page, pageSize] as const,
+  adminApiKeysRoot: ['admin-api-keys'] as const,
+  adminApiKeys: (userId: string, status: string, page: number, pageSize: number) =>
+    ['admin-api-keys', userId, status, page, pageSize] as const,
+  adminAuditLogsRoot: ['admin-audit-logs'] as const,
+  adminAuditLogs: (actorUserId: string, action: string, page: number, pageSize: number) =>
+    ['admin-audit-logs', actorUserId, action, page, pageSize] as const
 };
