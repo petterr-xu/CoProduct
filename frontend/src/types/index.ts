@@ -109,3 +109,93 @@ export type HistoryListResponse = {
   pageSize: number;
   items: HistoryItem[];
 };
+
+export type ListResponse<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export type CreateUserRequest = {
+  email: string;
+  displayName: string;
+  role: Role;
+  orgId?: string;
+};
+
+export type ListUsersQuery = {
+  query?: string;
+  role?: Role;
+  status?: UserStatus;
+  page: number;
+  pageSize: number;
+};
+
+export type UserListItem = {
+  id: string;
+  email: string;
+  displayName: string;
+  role: Role;
+  status: UserStatus;
+  orgId: string;
+  createdAt: string;
+  lastLoginAt: string | null;
+};
+
+export type UpdateUserStatusRequest = {
+  status: UserStatus;
+};
+
+export type UpdateUserRoleRequest = {
+  role: Role;
+};
+
+export type IssueApiKeyRequest = {
+  userId: string;
+  name: string;
+  expiresAt?: string;
+};
+
+export type IssueApiKeyResponse = {
+  keyId: string;
+  keyPrefix: string;
+  plainTextKey: string;
+  expiresAt: string | null;
+};
+
+export type ListApiKeysQuery = {
+  userId?: string;
+  status?: ApiKeyStatus;
+  page: number;
+  pageSize: number;
+};
+
+export type ApiKeyListItem = {
+  keyId: string;
+  userId: string;
+  keyPrefix: string;
+  status: ApiKeyStatus;
+  name: string;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+};
+
+export type ListAuditLogsQuery = {
+  actorUserId?: string;
+  action?: string;
+  page: number;
+  pageSize: number;
+};
+
+export type AuditLogItem = {
+  id: string;
+  actorUserId: string | null;
+  actorEmail: string | null;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  result: string | null;
+  createdAt: string;
+};

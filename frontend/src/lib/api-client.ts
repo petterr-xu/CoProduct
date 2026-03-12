@@ -1,12 +1,27 @@
 import {
+  ApiKeyListItem,
+  ApiKeyStatus,
+  AuditLogItem,
   CapabilityStatus,
+  CreateUserRequest,
   CreatePreReviewForm,
   FileParseStatus,
   HistoryItem,
   HistoryListResponse,
   HistoryQuery,
+  IssueApiKeyRequest,
+  IssueApiKeyResponse,
+  ListApiKeysQuery,
+  ListAuditLogsQuery,
+  ListResponse,
+  ListUsersQuery,
   PreReviewReportView,
+  Role,
   SessionStatus,
+  UpdateUserRoleRequest,
+  UpdateUserStatusRequest,
+  UserListItem,
+  UserStatus,
   UploadedFileRef
 } from '@/types';
 
@@ -31,6 +46,9 @@ export function getApiErrorMessage(error: unknown, fallback = '请求失败，�
     if (error.code === 'PERSISTENCE_ERROR') return '结果保存失败，请稍后重试。';
     if (error.code === 'PERMISSION_DENIED') return '当前账号没有此操作权限。';
     if (error.code === 'USER_DISABLED') return '账号已被禁用，请联系管理员。';
+    if (error.code === 'API_KEY_REVOKED') return '该密钥已被吊销，请联系管理员。';
+    if (error.code === 'RATE_LIMITED') return '请求过于频繁，请稍后再试。';
+    if (error.code === 'RESOURCE_NOT_FOUND') return '目标资源不存在。';
     if (error.code === 'AUTH_ERROR' || error.code === 'TOKEN_EXPIRED') return '登录状态已失效，请重新登录。';
     if (error.httpStatus === 401) return '登录状态已失效，请重新登录。';
     if (error.httpStatus === 403) return '当前账号没有此操作权限。';
@@ -51,6 +69,9 @@ const CAPABILITY_STATUS_SET = new Set<CapabilityStatus>([
   'NOT_SUPPORTED',
   'NEED_MORE_INFO'
 ]);
+const ROLE_SET = new Set<Role>(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']);
+const USER_STATUS_SET = new Set<UserStatus>(['ACTIVE', 'DISABLED', 'PENDING_INVITE']);
+const API_KEY_STATUS_SET = new Set<ApiKeyStatus>(['ACTIVE', 'REVOKED', 'EXPIRED']);
 const CONFIDENCE_SET = new Set(['high', 'medium', 'low']);
 const FILE_PARSE_STATUS_SET = new Set<FileParseStatus>(['PENDING', 'PARSING', 'DONE', 'FAILED']);
 
@@ -64,6 +85,22 @@ function asString(value: unknown, fallback = ''): string {
 
 function asNumber(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function pickString(row: Record<string, unknown>, keys: string[], fallback = ''): string {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === 'string') return value;
+  }
+  return fallback;
+}
+
+function pickNullableString(row: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return null;
 }
 
 function normalizeSessionStatus(value: unknown): SessionStatus {
@@ -81,6 +118,30 @@ function normalizeCapabilityStatus(value: unknown): CapabilityStatus {
     return text as CapabilityStatus;
   }
   return 'NEED_MORE_INFO';
+}
+
+function normalizeRole(value: unknown): Role {
+  const text = asString(value).toUpperCase();
+  if (ROLE_SET.has(text as Role)) {
+    return text as Role;
+  }
+  return 'VIEWER';
+}
+
+function normalizeUserStatus(value: unknown): UserStatus {
+  const text = asString(value).toUpperCase();
+  if (USER_STATUS_SET.has(text as UserStatus)) {
+    return text as UserStatus;
+  }
+  return 'ACTIVE';
+}
+
+function normalizeApiKeyStatus(value: unknown): ApiKeyStatus {
+  const text = asString(value).toUpperCase();
+  if (API_KEY_STATUS_SET.has(text as ApiKeyStatus)) {
+    return text as ApiKeyStatus;
+  }
+  return 'ACTIVE';
 }
 
 function normalizeConfidence(value: unknown): 'high' | 'medium' | 'low' | null {
@@ -171,6 +232,69 @@ function normalizeHistoryResponse(payload: unknown): HistoryListResponse {
     page: asNumber(data.page, 1),
     pageSize: asNumber(data.pageSize, 20),
     items
+  };
+}
+
+function normalizeListResponse<T>(payload: unknown, mapItem: (item: unknown) => T): ListResponse<T> {
+  const data = (payload ?? {}) as Record<string, unknown>;
+  const items = asArray(data.items).map(mapItem);
+  return {
+    items,
+    total: asNumber(data.total, items.length),
+    page: asNumber(data.page, 1),
+    pageSize: asNumber(data.pageSize, 20)
+  };
+}
+
+function normalizeUserItem(payload: unknown): UserListItem {
+  const row = (payload ?? {}) as Record<string, unknown>;
+  return {
+    id: pickString(row, ['id']),
+    email: pickString(row, ['email']),
+    displayName: pickString(row, ['displayName', 'display_name']),
+    role: normalizeRole(row.role),
+    status: normalizeUserStatus(row.status),
+    orgId: pickString(row, ['orgId', 'org_id']),
+    createdAt: pickString(row, ['createdAt', 'created_at']),
+    lastLoginAt: pickNullableString(row, ['lastLoginAt', 'last_login_at'])
+  };
+}
+
+function normalizeApiKeyItem(payload: unknown): ApiKeyListItem {
+  const row = (payload ?? {}) as Record<string, unknown>;
+  return {
+    keyId: pickString(row, ['keyId', 'key_id']),
+    userId: pickString(row, ['userId', 'user_id']),
+    keyPrefix: pickString(row, ['keyPrefix', 'key_prefix']),
+    status: normalizeApiKeyStatus(row.status),
+    name: pickString(row, ['name']),
+    expiresAt: pickNullableString(row, ['expiresAt', 'expires_at']),
+    lastUsedAt: pickNullableString(row, ['lastUsedAt', 'last_used_at']),
+    createdAt: pickString(row, ['createdAt', 'created_at'])
+  };
+}
+
+function normalizeIssuedApiKey(payload: unknown): IssueApiKeyResponse {
+  const row = (payload ?? {}) as Record<string, unknown>;
+  return {
+    keyId: pickString(row, ['keyId', 'key_id']),
+    keyPrefix: pickString(row, ['keyPrefix', 'key_prefix']),
+    plainTextKey: pickString(row, ['plainTextKey', 'plain_text_key']),
+    expiresAt: pickNullableString(row, ['expiresAt', 'expires_at'])
+  };
+}
+
+function normalizeAuditLogItem(payload: unknown): AuditLogItem {
+  const row = (payload ?? {}) as Record<string, unknown>;
+  return {
+    id: pickString(row, ['id']),
+    actorUserId: pickNullableString(row, ['actorUserId', 'actor_user_id']),
+    actorEmail: pickNullableString(row, ['actorEmail', 'actor_email']),
+    action: pickString(row, ['action']),
+    targetType: pickNullableString(row, ['targetType', 'target_type']),
+    targetId: pickNullableString(row, ['targetId', 'target_id']),
+    result: pickNullableString(row, ['result']),
+    createdAt: pickString(row, ['createdAt', 'created_at'])
   };
 }
 
@@ -337,6 +461,81 @@ export const apiClient = {
       fileSize: asNumber(raw.fileSize),
       parseStatus: normalizeFileParseStatus(raw.parseStatus)
     };
+  },
+
+  async createUser(payload: CreateUserRequest): Promise<UserListItem> {
+    const raw = await requestJson<unknown>('/api/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    return normalizeUserItem(raw);
+  },
+
+  async listUsers(query: ListUsersQuery): Promise<ListResponse<UserListItem>> {
+    const page = Math.max(1, Math.trunc(query.page));
+    const pageSize = Math.min(100, Math.max(1, Math.trunc(query.pageSize)));
+    const params = new URLSearchParams();
+    if (query.query) params.set('query', query.query);
+    if (query.role) params.set('role', query.role);
+    if (query.status) params.set('status', query.status);
+    params.set('page', String(page));
+    params.set('pageSize', String(pageSize));
+    const raw = await requestJson<unknown>(`/api/admin/users?${params.toString()}`);
+    return normalizeListResponse(raw, normalizeUserItem);
+  },
+
+  async updateUserStatus(userId: string, payload: UpdateUserStatusRequest): Promise<UserListItem> {
+    const raw = await requestJson<unknown>(`/api/admin/users/${userId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+    return normalizeUserItem(raw);
+  },
+
+  async updateUserRole(userId: string, payload: UpdateUserRoleRequest): Promise<UserListItem> {
+    const raw = await requestJson<unknown>(`/api/admin/users/${userId}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+    return normalizeUserItem(raw);
+  },
+
+  async issueApiKey(payload: IssueApiKeyRequest): Promise<IssueApiKeyResponse> {
+    const raw = await requestJson<unknown>('/api/admin/api-keys', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    return normalizeIssuedApiKey(raw);
+  },
+
+  async listApiKeys(query: ListApiKeysQuery): Promise<ListResponse<ApiKeyListItem>> {
+    const page = Math.max(1, Math.trunc(query.page));
+    const pageSize = Math.min(100, Math.max(1, Math.trunc(query.pageSize)));
+    const params = new URLSearchParams();
+    if (query.userId) params.set('userId', query.userId);
+    if (query.status) params.set('status', query.status);
+    params.set('page', String(page));
+    params.set('pageSize', String(pageSize));
+    const raw = await requestJson<unknown>(`/api/admin/api-keys?${params.toString()}`);
+    return normalizeListResponse(raw, normalizeApiKeyItem);
+  },
+
+  revokeApiKey(keyId: string) {
+    return requestJson<{ success: true }>(`/api/admin/api-keys/${keyId}/revoke`, {
+      method: 'POST',
+      body: JSON.stringify({})
+    });
+  },
+
+  async listAuditLogs(query: ListAuditLogsQuery): Promise<ListResponse<AuditLogItem>> {
+    const page = Math.max(1, Math.trunc(query.page));
+    const pageSize = Math.min(100, Math.max(1, Math.trunc(query.pageSize)));
+    const params = new URLSearchParams();
+    if (query.actorUserId) params.set('actorUserId', query.actorUserId);
+    if (query.action) params.set('action', query.action);
+    params.set('page', String(page));
+    params.set('pageSize', String(pageSize));
+    const raw = await requestJson<unknown>(`/api/admin/audit-logs?${params.toString()}`);
+    return normalizeListResponse(raw, normalizeAuditLogItem);
   }
 };
-
