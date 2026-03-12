@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     auth_cookie_domain: str | None = None
     refresh_cookie_name: str = "refresh_token"
     csrf_cookie_name: str = "csrf_token"
+    refresh_cookie_path: str = "/api/auth"
+    csrf_cookie_path: str = "/"
 
     default_org_id: str = "org_default"
     bootstrap_owner_email: str = "owner@coproduct.local"
@@ -54,6 +56,11 @@ def validate_security_settings(settings: Settings) -> None:
     allowed_auth_modes = {"legacy", "hybrid", "jwt"}
     if settings.auth_mode not in allowed_auth_modes:
         raise RuntimeError(f"Unsupported COPRODUCT_AUTH_MODE: {settings.auth_mode}")
+
+    if not settings.refresh_cookie_path.startswith("/"):
+        raise RuntimeError("COPRODUCT_REFRESH_COOKIE_PATH must start with '/'")
+    if not settings.csrf_cookie_path.startswith("/"):
+        raise RuntimeError("COPRODUCT_CSRF_COOKIE_PATH must start with '/'")
 
     if settings.app_env.lower() != "prod":
         return

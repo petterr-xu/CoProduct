@@ -23,7 +23,6 @@ def _set_auth_cookies(*, response: Response, settings: Settings, refresh_token: 
     base_kwargs = {
         "secure": settings.auth_cookie_secure,
         "samesite": settings.auth_cookie_samesite,
-        "path": f"{settings.api_prefix}/auth",
         "domain": settings.auth_cookie_domain,
     }
     response.set_cookie(
@@ -31,6 +30,7 @@ def _set_auth_cookies(*, response: Response, settings: Settings, refresh_token: 
         value=refresh_token,
         max_age=settings.refresh_token_ttl_seconds,
         httponly=True,
+        path=settings.refresh_cookie_path,
         **base_kwargs,
     )
     response.set_cookie(
@@ -38,13 +38,22 @@ def _set_auth_cookies(*, response: Response, settings: Settings, refresh_token: 
         value=csrf_token,
         max_age=settings.refresh_token_ttl_seconds,
         httponly=False,
+        path=settings.csrf_cookie_path,
         **base_kwargs,
     )
 
 
 def _clear_auth_cookies(*, response: Response, settings: Settings) -> None:
-    response.delete_cookie(key=settings.refresh_cookie_name, path=f"{settings.api_prefix}/auth", domain=settings.auth_cookie_domain)
-    response.delete_cookie(key=settings.csrf_cookie_name, path=f"{settings.api_prefix}/auth", domain=settings.auth_cookie_domain)
+    response.delete_cookie(
+        key=settings.refresh_cookie_name,
+        path=settings.refresh_cookie_path,
+        domain=settings.auth_cookie_domain,
+    )
+    response.delete_cookie(
+        key=settings.csrf_cookie_name,
+        path=settings.csrf_cookie_path,
+        domain=settings.auth_cookie_domain,
+    )
 
 
 class LoginRequest(BaseModel):
