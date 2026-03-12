@@ -22,11 +22,9 @@ export function RouteGuard({ children }: RouteGuardProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { user, hasBootstrapped, isBootstrapping } = useAuthStore((state) => ({
-    user: state.user,
-    hasBootstrapped: state.hasBootstrapped,
-    isBootstrapping: state.isBootstrapping
-  }));
+  const user = useAuthStore((state) => state.user);
+  const hasBootstrapped = useAuthStore((state) => state.hasBootstrapped);
+  const isBootstrapping = useAuthStore((state) => state.isBootstrapping);
 
   const isPublicRoute = pathname === '/login';
   const isAuthenticated = Boolean(user);
