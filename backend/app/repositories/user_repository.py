@@ -295,6 +295,46 @@ class UserRepository:
         items = [self._to_member_item(user, membership, function_role) for user, membership, function_role in rows]
         return total, items
 
+    def list_member_options(
+        self,
+        *,
+        org_id: str,
+        query_prefix: str,
+        limit: int,
+    ) -> list[dict]:
+        pattern = f"{query_prefix.strip()}%"
+        rows = self.db.execute(
+            select(UserModel, MembershipModel)
+            .select_from(MembershipModel)
+            .join(UserModel, UserModel.id == MembershipModel.user_id)
+            .where(
+                and_(
+                    MembershipModel.org_id == org_id,
+                    MembershipModel.status == "ACTIVE",
+                    UserModel.status == "ACTIVE",
+                    or_(
+                        UserModel.email.ilike(pattern),
+                        UserModel.display_name.ilike(pattern),
+                    ),
+                )
+            )
+            .order_by(UserModel.email.asc(), MembershipModel.created_at.asc())
+            .limit(limit)
+        ).all()
+
+        return [
+            {
+                "userId": user.id,
+                "membershipId": membership.id,
+                "email": user.email,
+                "displayName": user.display_name,
+                "permissionRole": membership.role,
+                "memberStatus": membership.status,
+                "orgId": membership.org_id,
+            }
+            for user, membership in rows
+        ]
+
     def get_member_item(self, *, membership_id: str) -> dict | None:
         row = self.db.execute(
             select(UserModel, MembershipModel, FunctionalRoleModel)
@@ -427,25 +467,29 @@ class UserRepository:
         total = int(self.db.execute(total_stmt).scalar_one() or 0)
 
         rows = self.db.execute(
-            select(ApiKeyModel)
+            select(ApiKeyModel, UserModel)
+            .select_from(ApiKeyModel)
+            .outerjoin(UserModel, UserModel.id == ApiKeyModel.user_id)
             .where(and_(*filters))
             .order_by(desc(ApiKeyModel.created_at))
             .offset((page - 1) * page_size)
             .limit(page_size)
-        ).scalars()
+        ).all()
 
         items = [
             {
-                "keyId": item.id,
-                "userId": item.user_id,
-                "keyPrefix": item.key_prefix,
-                "status": item.status,
-                "name": item.name,
-                "expiresAt": item.expires_at.isoformat() if item.expires_at else None,
-                "lastUsedAt": item.last_used_at.isoformat() if item.last_used_at else None,
-                "createdAt": item.created_at.isoformat() if item.created_at else "",
+                "keyId": api_key.id,
+                "userId": api_key.user_id,
+                "userEmail": user.email if user else None,
+                "userDisplayName": user.display_name if user else None,
+                "keyPrefix": api_key.key_prefix,
+                "status": api_key.status,
+                "name": api_key.name,
+                "expiresAt": api_key.expires_at.isoformat() if api_key.expires_at else None,
+                "lastUsedAt": api_key.last_used_at.isoformat() if api_key.last_used_at else None,
+                "createdAt": api_key.created_at.isoformat() if api_key.created_at else "",
             }
-            for item in rows
+            for api_key, user in rows
         ]
         return total, items
 

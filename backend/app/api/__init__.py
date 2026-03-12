@@ -9,6 +9,7 @@ from app.api.admin_api_keys import router as admin_api_keys_router
 from app.api.admin_audit_logs import router as admin_audit_logs_router
 from app.api.admin_members import router as admin_members_router
 from app.api.admin_functional_roles import router as admin_functional_roles_router
+from app.api.admin_member_options import router as admin_member_options_router
 
 __all__ = [
     "prereview_router",
@@ -20,4 +21,5 @@ __all__ = [
     "admin_audit_logs_router",
     "admin_members_router",
     "admin_functional_roles_router",
+    "admin_member_options_router",
 ]
