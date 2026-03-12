@@ -12,6 +12,20 @@ export type AuthUserView = {
   status: UserStatus;
 };
 
+export type AuthContextOrgView = {
+  orgId: string;
+  orgName: string;
+};
+
+export type AuthContextScopeMode = 'ORG_SCOPED' | 'USER_SCOPED';
+
+export type AuthContextResponse = {
+  user: AuthUserView;
+  activeOrg: AuthContextOrgView | null;
+  availableOrgs: AuthContextOrgView[];
+  scopeMode: AuthContextScopeMode;
+};
+
 export type AuthTokenResponse = {
   accessToken: string;
   tokenType: 'Bearer';

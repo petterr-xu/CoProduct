@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { ErrorAlert } from '@/components/base/error-alert';
 import { authClient } from '@/lib/auth-client';
 import { ApiClientError } from '@/lib/http-client';
-import { useAuthStore } from '@/stores/auth-store';
+import { buildFallbackAuthContext, useAuthStore } from '@/stores/auth-store';
 
 const schema = z.object({
   apiKey: z.string().min(20, 'API Key 长度至少 20 位').max(128, 'API Key 过长')
@@ -33,6 +33,7 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const setSession = useAuthStore((state) => state.setSession);
+  const setAuthContext = useAuthStore((state) => state.setAuthContext);
   const redirectTarget = useMemo(() => searchParams?.get('redirect') || '/', [searchParams]);
 
   const {
@@ -52,6 +53,8 @@ export function LoginForm() {
         deviceInfo: navigator.userAgent
       });
       setSession({ accessToken: login.accessToken, user: login.user });
+      const context = await authClient.getContext(login.accessToken).catch(() => buildFallbackAuthContext(login.user));
+      setAuthContext(context);
       router.replace(redirectTarget as Route);
     } catch (error) {
       setError('root', { message: mapLoginError(error) });

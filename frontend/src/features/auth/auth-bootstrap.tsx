@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 
 import { authClient } from '@/lib/auth-client';
-import { useAuthStore } from '@/stores/auth-store';
+import { buildFallbackAuthContext, useAuthStore } from '@/stores/auth-store';
 
 export function AuthBootstrap() {
   const bootstrappedRef = useRef(false);
@@ -21,15 +21,19 @@ export function AuthBootstrap() {
         const current = useAuthStore.getState();
         if (current.accessToken) {
           const user = await authClient.getMe(current.accessToken);
+          const context = await authClient.getContext(current.accessToken).catch(() => buildFallbackAuthContext(user));
           if (cancelled) return;
           store.setSession({ accessToken: current.accessToken, user });
+          store.setAuthContext(context);
           return;
         }
 
         const refreshed = await authClient.refresh();
         const user = await authClient.getMe(refreshed.accessToken);
+        const context = await authClient.getContext(refreshed.accessToken).catch(() => buildFallbackAuthContext(user));
         if (cancelled) return;
         store.setSession({ accessToken: refreshed.accessToken, user });
+        store.setAuthContext(context);
       } catch {
         if (!cancelled) {
           store.clearSession();
@@ -50,4 +54,3 @@ export function AuthBootstrap() {
 
   return null;
 }
-

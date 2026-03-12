@@ -37,7 +37,7 @@ import {
 
 import { authClient } from '@/lib/auth-client';
 import { ApiClientError, fetchWithTimeout, parseErrorResponse } from '@/lib/http-client';
-import { useAuthStore } from '@/stores/auth-store';
+import { buildFallbackAuthContext, useAuthStore } from '@/stores/auth-store';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -63,6 +63,7 @@ export function getApiErrorMessage(error: unknown, fallback = '请求失败，�
     if (error.code === 'SELF_OPERATION_FORBIDDEN') return '该操作会影响当前登录身份，已被系统拦截。';
     if (error.code === 'OWNER_GUARD_VIOLATION') return '管理员不能直接操作所有者成员。';
     if (error.code === 'FUNCTION_ROLE_MISMATCH') return '所选职能角色与当前组织不匹配。';
+    if (error.code === 'NO_ACTIVE_ORG') return '当前账号无可用组织，请联系管理员处理。';
     if (error.code === 'AUTH_ERROR' || error.code === 'TOKEN_EXPIRED') return '登录状态已失效，请重新登录。';
     if (error.httpStatus === 401) return '登录状态已失效，请重新登录。';
     if (error.httpStatus === 403) return '当前账号没有此操作权限。';
@@ -362,13 +363,10 @@ type RequestOptions = {
 async function ensureFreshAccessToken(): Promise<string> {
   const refreshed = await authClient.refresh();
   const store = useAuthStore.getState();
-  if (store.user) {
-    store.setSession({ accessToken: refreshed.accessToken, user: store.user });
-    return refreshed.accessToken;
-  }
-
-  const user = await authClient.getMe(refreshed.accessToken);
-  useAuthStore.getState().setSession({ accessToken: refreshed.accessToken, user });
+  const user = store.user ?? (await authClient.getMe(refreshed.accessToken));
+  const context = await authClient.getContext(refreshed.accessToken).catch(() => buildFallbackAuthContext(user));
+  store.setSession({ accessToken: refreshed.accessToken, user });
+  store.setAuthContext(context);
   return refreshed.accessToken;
 }
 
