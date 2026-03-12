@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 from app.core.config import Settings
 from app.core.logging import log_event
+from app.core.user_context import CurrentUserContext
 from app.repositories import PreReviewRepository
 from app.services.attachment_service import AttachmentService
 from app.services.persistence_service import PersistenceService
@@ -26,6 +27,7 @@ class PreReviewCreateInput:
     business_domain: str | None = None
     module_hint: str | None = None
     attachments: list[dict] = field(default_factory=list)
+    current_user: CurrentUserContext | None = None
 
 
 @dataclass
@@ -35,6 +37,7 @@ class PreReviewRegenerateInput:
     parent_session_id: str
     additional_context: str | None = None
     attachments: list[dict] = field(default_factory=list)
+    current_user: CurrentUserContext | None = None
 
 
 class PreReviewService:
@@ -55,9 +58,14 @@ class PreReviewService:
             background_text=payload.background_text,
             business_domain=payload.business_domain,
             module_hint=payload.module_hint,
+            org_id=payload.current_user.org_id if payload.current_user else None,
+            created_by_user_id=payload.current_user.user_id if payload.current_user else None,
         )
-        session_id, version = self.session_service.create_session(request.id)
-        attachment_text = self.attachment_service.merge_attachment_text(payload.attachments)
+        session_id, version = self.session_service.create_session(request.id, current_user=payload.current_user)
+        attachment_text = self.attachment_service.merge_attachment_text(
+            payload.attachments,
+            current_user=payload.current_user,
+        )
 
         initial_state: PreReviewState = {
             "session_id": session_id,
@@ -110,19 +118,23 @@ class PreReviewService:
 
     def regenerate_prereview(self, payload: PreReviewRegenerateInput) -> dict:
         """Create a child session from parent session and rerun the full workflow."""
-        parent_session = self.repo.get_session(payload.parent_session_id)
+        parent_session = self.repo.get_session(payload.parent_session_id, scope=payload.current_user)
         if parent_session is None:
             raise ValueError("parent session not found")
 
-        request = self.repo.get_request(parent_session.request_id)
+        request = self.repo.get_request(parent_session.request_id, scope=payload.current_user)
         if request is None:
             raise ValueError("request not found")
 
         session_id, version = self.session_service.create_session(
             request_id=request.id,
+            current_user=payload.current_user,
             parent_session_id=parent_session.id,
         )
-        attachment_text = self.attachment_service.merge_attachment_text(payload.attachments)
+        attachment_text = self.attachment_service.merge_attachment_text(
+            payload.attachments,
+            current_user=payload.current_user,
+        )
 
         initial_state: PreReviewState = {
             "session_id": session_id,
@@ -175,9 +187,9 @@ class PreReviewService:
             )
             raise
 
-    def get_prereview(self, session_id: str) -> dict | None:
+    def get_prereview(self, session_id: str, current_user: CurrentUserContext | None = None) -> dict | None:
         """Return frontend-facing view model for a session."""
-        return self.persistence_service.get_session_result(session_id)
+        return self.persistence_service.get_session_result(session_id, current_user=current_user)
 
     @staticmethod
     def _build_normalized_request(

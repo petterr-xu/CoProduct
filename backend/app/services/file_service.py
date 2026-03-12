@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.core.config import Settings
+from app.core.user_context import CurrentUserContext
 from app.repositories import PreReviewRepository
 
 
@@ -18,7 +19,14 @@ class FileService:
         self.settings = settings
         self.repo = repo
 
-    def save_uploaded_file(self, *, file_name: str, content_type: str, content: bytes) -> dict:
+    def save_uploaded_file(
+        self,
+        *,
+        file_name: str,
+        content_type: str,
+        content: bytes,
+        current_user: CurrentUserContext | None = None,
+    ) -> dict:
         """Persist file content and return frontend-facing UploadedFileRef fields."""
         extension = Path(file_name).suffix.lower()
         if extension not in self.allowed_extensions:
@@ -41,6 +49,8 @@ class FileService:
             mime_type=content_type or "application/octet-stream",
             storage_key=storage_key,
             parse_status="PENDING",
+            org_id=current_user.org_id if current_user else None,
+            created_by_user_id=current_user.user_id if current_user else None,
         )
 
         return {

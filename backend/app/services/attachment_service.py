@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.core.config import Settings
 from app.core.logging import log_event
+from app.core.user_context import CurrentUserContext
 from app.repositories import PreReviewRepository
 from app.utils.text import clean_text, truncate_text
 
@@ -19,20 +20,20 @@ class AttachmentService:
         self.settings = settings
         self.repo = repo
 
-    def merge_attachment_text(self, attachments: list[dict]) -> str:
+    def merge_attachment_text(self, attachments: list[dict], current_user: CurrentUserContext | None = None) -> str:
         """Best-effort parse of attachments; failures are logged and skipped."""
         snippets: list[str] = []
         for attachment in attachments:
             file_id = str(attachment.get("file_id", "")).strip()
             if not file_id:
                 continue
-            snippet = self._parse_single_attachment(file_id)
+            snippet = self._parse_single_attachment(file_id, current_user=current_user)
             if snippet:
                 snippets.append(snippet)
         return "\n\n".join(snippets)
 
-    def _parse_single_attachment(self, file_id: str) -> str:
-        file_record = self.repo.get_uploaded_file(file_id)
+    def _parse_single_attachment(self, file_id: str, current_user: CurrentUserContext | None = None) -> str:
+        file_record = self.repo.get_uploaded_file(file_id, scope=current_user)
         if file_record is None:
             log_event(
                 "attachment_missing",

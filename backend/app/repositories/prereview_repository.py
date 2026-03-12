@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from sqlalchemy import Select, desc, func, or_, select
+from sqlalchemy import Select, and_, desc, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.user_context import CurrentUserContext
 from app.models import EvidenceItemModel, ReportModel, RequestModel, SessionModel, UploadedFileModel
 
 
@@ -17,25 +18,45 @@ class PreReviewRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    @staticmethod
+    def _scope_filters(*, scope: CurrentUserContext | None, org_col, user_col) -> list:
+        if scope is None:
+            return []
+        if scope.auth_mode in {"legacy", "hybrid"} and scope.user_id == "legacy_user":
+            return []
+
+        filters = [org_col == scope.org_id]
+        if scope.role == "MEMBER":
+            filters.append(user_col == scope.user_id)
+        return filters
+
     def create_request(
         self,
         requirement_text: str,
         background_text: str | None,
         business_domain: str | None,
         module_hint: str | None,
+        org_id: str | None = None,
+        created_by_user_id: str | None = None,
     ) -> RequestModel:
         item = RequestModel(
             requirement_text=requirement_text,
             background_text=background_text,
             business_domain=business_domain,
             module_hint=module_hint,
+            org_id=org_id,
+            created_by_user_id=created_by_user_id,
         )
         self.db.add(item)
         self.db.flush()
         return item
 
-    def get_request(self, request_id: str) -> RequestModel | None:
-        return self.db.get(RequestModel, request_id)
+    def get_request(self, request_id: str, scope: CurrentUserContext | None = None) -> RequestModel | None:
+        stmt: Select[tuple[RequestModel]] = select(RequestModel).where(RequestModel.id == request_id).limit(1)
+        scope_filters = self._scope_filters(scope=scope, org_col=RequestModel.org_id, user_col=RequestModel.created_by_user_id)
+        if scope_filters:
+            stmt = stmt.where(and_(*scope_filters))
+        return self.db.execute(stmt).scalar_one_or_none()
 
     def create_session(
         self,
@@ -43,6 +64,8 @@ class PreReviewRepository:
         parent_session_id: str | None,
         version: int,
         status: str = "PROCESSING",
+        org_id: str | None = None,
+        created_by_user_id: str | None = None,
     ) -> SessionModel:
         item = SessionModel(
             request_id=request_id,
@@ -50,13 +73,19 @@ class PreReviewRepository:
             version=version,
             status=status,
             started_at=utc_now(),
+            org_id=org_id,
+            created_by_user_id=created_by_user_id,
         )
         self.db.add(item)
         self.db.flush()
         return item
 
-    def get_session(self, session_id: str) -> SessionModel | None:
-        return self.db.get(SessionModel, session_id)
+    def get_session(self, session_id: str, scope: CurrentUserContext | None = None) -> SessionModel | None:
+        stmt: Select[tuple[SessionModel]] = select(SessionModel).where(SessionModel.id == session_id).limit(1)
+        scope_filters = self._scope_filters(scope=scope, org_col=SessionModel.org_id, user_col=SessionModel.created_by_user_id)
+        if scope_filters:
+            stmt = stmt.where(and_(*scope_filters))
+        return self.db.execute(stmt).scalar_one_or_none()
 
     def get_latest_session_by_request(self, request_id: str) -> SessionModel | None:
         stmt: Select[tuple[SessionModel]] = (
@@ -136,6 +165,8 @@ class PreReviewRepository:
         mime_type: str,
         storage_key: str,
         parse_status: str = "PENDING",
+        org_id: str | None = None,
+        created_by_user_id: str | None = None,
     ) -> UploadedFileModel:
         item = UploadedFileModel(
             file_name=file_name,
@@ -143,13 +174,23 @@ class PreReviewRepository:
             mime_type=mime_type,
             storage_key=storage_key,
             parse_status=parse_status,
+            org_id=org_id,
+            created_by_user_id=created_by_user_id,
         )
         self.db.add(item)
         self.db.flush()
         return item
 
-    def get_uploaded_file(self, file_id: str) -> UploadedFileModel | None:
-        return self.db.get(UploadedFileModel, file_id)
+    def get_uploaded_file(self, file_id: str, scope: CurrentUserContext | None = None) -> UploadedFileModel | None:
+        stmt: Select[tuple[UploadedFileModel]] = select(UploadedFileModel).where(UploadedFileModel.id == file_id).limit(1)
+        scope_filters = self._scope_filters(
+            scope=scope,
+            org_col=UploadedFileModel.org_id,
+            user_col=UploadedFileModel.created_by_user_id,
+        )
+        if scope_filters:
+            stmt = stmt.where(and_(*scope_filters))
+        return self.db.execute(stmt).scalar_one_or_none()
 
     def update_uploaded_file_parse_status(self, file_id: str, parse_status: str) -> UploadedFileModel | None:
         item = self.db.get(UploadedFileModel, file_id)
@@ -167,6 +208,7 @@ class PreReviewRepository:
         capability_status: str | None,
         page: int,
         page_size: int,
+        scope: CurrentUserContext | None = None,
     ) -> tuple[int, list[dict]]:
         filters = []
         if keyword:
@@ -179,6 +221,10 @@ class PreReviewRepository:
             )
         if capability_status:
             filters.append(ReportModel.capability_status == capability_status)
+
+        scope_filters = self._scope_filters(scope=scope, org_col=SessionModel.org_id, user_col=SessionModel.created_by_user_id)
+        if scope_filters:
+            filters.extend(scope_filters)
 
         total_stmt = (
             select(func.count(SessionModel.id))

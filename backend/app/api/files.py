@@ -3,9 +3,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import verify_api_token
+from app.core.auth import get_current_user
 from app.core.config import get_settings
 from app.core.db import get_db
+from app.core.permissions import require_write_permission
+from app.core.user_context import CurrentUserContext
 from app.repositories import PreReviewRepository
 from app.services import FileService
 
@@ -13,9 +15,14 @@ router = APIRouter(prefix="/files", tags=["files"])
 settings = get_settings()
 
 
-@router.post("/upload", dependencies=[Depends(verify_api_token)])
-async def upload_file(file: UploadFile, db: Session = Depends(get_db)) -> dict:
+@router.post("/upload")
+async def upload_file(
+    file: UploadFile,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
     """Upload a file, persist metadata, and return a stable fileId reference."""
+    require_write_permission(current_user)
     repo = PreReviewRepository(db)
     service = FileService(settings=settings, repo=repo)
     try:
@@ -24,6 +31,7 @@ async def upload_file(file: UploadFile, db: Session = Depends(get_db)) -> dict:
             file_name=file.filename or "unknown",
             content_type=file.content_type or "application/octet-stream",
             content=content,
+            current_user=current_user,
         )
         db.commit()
         return result

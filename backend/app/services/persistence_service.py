@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from app.core.user_context import CurrentUserContext
 from app.repositories import PreReviewRepository
 from app.workflow.state import PreReviewState
 
@@ -31,9 +32,9 @@ class PersistenceService:
         """Persist failure status and error message for troubleshooting."""
         self.repo.update_session_status(session_id=session_id, status="FAILED", error_message=error_message)
 
-    def get_session_result(self, session_id: str) -> dict | None:
+    def get_session_result(self, session_id: str, current_user: CurrentUserContext | None = None) -> dict | None:
         """Build frontend-aligned response shape from stored session/report/evidence."""
-        session = self.repo.get_session(session_id)
+        session = self.repo.get_session(session_id, scope=current_user)
         if session is None:
             return None
 
