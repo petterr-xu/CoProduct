@@ -1,9 +1,9 @@
 # 前端契约文档 - user_management
-> Version: v0.4.0
+> Version: v0.5.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
-> Contract Priority (v0.4.0): 若旧段落与 `v0.4.0` 新增规则冲突，以 `v0.4.0` 为准；`v0.3.0` 作为兼容基线保留。
+> Contract Priority (v0.5.0): 若旧段落与 `v0.5.0` 新增规则冲突，以 `v0.5.0` 为准；`v0.4.0` 作为兼容基线保留。
 
 ## 1. 请求模型（前端视角）
 
@@ -114,6 +114,7 @@ type IssueApiKeyRequest = {
   userId: string;
   name: string;
   expiresAt?: string; // ISO 8601
+  orgId?: string; // v0.5.0：可选，ORG_SCOPED 下由上下文固定
 };
 ```
 
@@ -122,6 +123,7 @@ type IssueApiKeyRequest = {
 ```ts
 type ListApiKeysQuery = {
   userId?: string;
+  orgId?: string; // v0.5.0：可选，未来 USER_SCOPED 支持按组织过滤
   status?: ApiKeyStatus;
   page?: number;
   pageSize?: number;
@@ -132,10 +134,28 @@ type ListApiKeysQuery = {
 
 - 无请求体。
 
+8. `GET /api/admin/member-options`（v0.5.0 新增）
+
+```ts
+type ListMemberOptionsQuery = {
+  query: string; // 前缀匹配，建议最少 2 字符
+  orgId?: string;
+  limit?: number; // 默认 20，最大 50
+};
+```
+
 > v0.3.0 补充（对已有接口的增量约束）：
 1. `POST /api/admin/users` 中 `orgId` 不传时，后端默认使用当前登录用户所属组织。
 2. `PATCH /api/admin/users/{user_id}/status|role` 进入治理红线校验（如“至少一个 owner”）。
 3. 前端在兼容窗口中保留对 `/api/admin/users/*` 的消费能力。
+
+> Obsolete in v0.5.0: API Key 签发流程中“手工输入 userId 文本框”被标记为过时交互，前端主路径改为成员联想选择。
+
+v0.5.0 生效规则（API Key 签发）：
+
+1. 前端提交 `IssueApiKeyRequest.userId` 必须来自成员候选项选择，而非任意文本。
+2. `ORG_SCOPED` 下 `orgId` 由 `activeOrg` 固定，不允许自由编辑。
+3. `USER_SCOPED`（未来）允许在 `availableOrgs` 中切换组织后再查询成员候选。
 
 ### 1.2A 管理接口请求（Phase 4 新增）
 
@@ -311,6 +331,8 @@ type ListResponse<T> = {
 type ApiKeyListItem = {
   keyId: string;
   userId: string;
+  userEmail?: string;
+  userDisplayName?: string;
   keyPrefix: string;
   status: ApiKeyStatus;
   name: string;
@@ -319,8 +341,21 @@ type ApiKeyListItem = {
   createdAt: string;
 };
 
+type MemberOptionItem = {
+  userId: string;
+  membershipId: string;
+  email: string;
+  displayName: string;
+  permissionRole: Role;
+  memberStatus: MemberStatus;
+  orgId: string;
+};
+
 type ListUsersResponse = ListResponse<UserListItem>;
 type ListApiKeysResponse = ListResponse<ApiKeyListItem>;
+type ListMemberOptionsResponse = {
+  items: MemberOptionItem[];
+};
 
 type OperationSuccessResponse = {
   success: true;
@@ -435,10 +470,20 @@ type MemberStatus = 'INVITED' | 'ACTIVE' | 'SUSPENDED' | 'REMOVED';
 2. `CreateUserRequest.orgId` 字段在兼容期保留，但前端不再提供自由文本输入。
 3. 未来切换到用户态登录时，前端无需改动创建成员接口结构，仅切换 `scopeMode` 分支行为。
 
-## 7. Contract Item IDs（v0.4.0 增量）
+## 7. v0.5.0 兼容说明（新增）
+
+1. API Key 签发保留 `userId` 作为提交主键，但前端 UI 主路径不再暴露自由输入框。
+2. 新增 `GET /api/admin/member-options` 作为“签发前成员检索”的唯一接口。
+3. `IssueApiKeyRequest.orgId?` 为兼容字段：当前 `ORG_SCOPED` 可不传，未来 `USER_SCOPED` 可显式传入。
+4. `GET /api/admin/api-keys` 响应可新增 `userEmail/userDisplayName`，前端需向后兼容缺失场景。
+
+## 8. Contract Item IDs（v0.5.0 增量）
 
 | Contract ID | 说明 | 关联端点/模型 |
 |---|---|---|
 | FC-401 | 登录上下文响应模型（`activeOrg/availableOrgs/scopeMode`） | `GET /api/auth/context` + `AuthContextResponse` |
 | FC-402 | 创建成员组织字段语义（仅允许上下文来源） | `POST /api/admin/users` + `CreateUserRequest.orgId?` |
 | FC-403 | 无组织上下文错误处理 | `NO_ACTIVE_ORG` 错误码映射 |
+| FC-501 | API Key 签发成员检索契约 | `GET /api/admin/member-options` + `ListMemberOptionsResponse` |
+| FC-502 | API Key 签发组织语义约束 | `POST /api/admin/api-keys` + `IssueApiKeyRequest.orgId?` |
+| FC-503 | API Key 列表可读字段扩展 | `GET /api/admin/api-keys` + `ApiKeyListItem.userEmail/userDisplayName` |

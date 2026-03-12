@@ -1,5 +1,5 @@
 # 后端检查清单 - user_management
-> Version: v0.4.0
+> Version: v0.5.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
@@ -41,6 +41,15 @@
 5. AC-BE-505：`NO_ACTIVE_ORG` 与跨组织拒绝均写入审计日志（`result=FAILED`）。
 6. AC-BE-506：`scopeMode` 当前固定 `ORG_SCOPED`，契约字段稳定可解析。
 
+### 1.5 Phase 6 功能（v0.5.0 新增）
+
+1. AC-BE-601：`GET /api/admin/member-options` 可按 `orgId+query(prefix)` 返回成员候选。
+2. AC-BE-602：成员检索接口仅返回当前可管理组织数据，不会泄露跨组织成员。
+3. AC-BE-603：`POST /api/admin/api-keys` 支持 `orgId?` 且跨组织组合稳定拒绝。
+4. AC-BE-604：签发目标成员不存在或不在目标组织时返回 `RESOURCE_NOT_FOUND`。
+5. AC-BE-605：`GET /api/admin/api-keys` 响应可包含 `userEmail/userDisplayName` 可读字段。
+6. AC-BE-606：Phase 6 新增路径的拒绝分支都写入 `FAILED` 审计日志。
+
 ## 2. 契约对齐检查
 
 1. `05_backend_contract.md` 中路由、方法、字段与实现一致。
@@ -50,6 +59,7 @@
 5. 端点级权限矩阵与文档一致（含 `MEMBER` 本人数据限制）。
 6. 成员语义接口（`/api/admin/members/*`）与兼容接口（`/api/admin/users/*`）行为一致。
 7. 职能角色字段语义与约束（单值绑定）与契约一致。
+8. `GET /api/admin/member-options` 与 `POST /api/admin/api-keys` 的组织校验语义一致。
 
 ## 3. 持久化与流程检查
 
@@ -72,8 +82,9 @@
 7. 灰度期 `auth_legacy_fallback_total` 指标可用且可下钻排查。
 8. 治理拒绝类错误（`LAST_OWNER_PROTECTED` 等）具备稳定状态码与审计记录。
 9. `NO_ACTIVE_ORG` 错误码在契约、实现、日志中一致。
+10. 成员检索接口具备查询长度与 limit 上限保护，避免无界扫描。
 
-## 5. 追踪映射（v0.4.0 增量）
+## 5. 追踪映射（v0.5.0 增量）
 
 | 验收项 | 关联任务 | 关联契约 |
 |---|---|---|
@@ -83,3 +94,9 @@
 | AC-BE-504 | BE-5.3 | BC-403 |
 | AC-BE-505 | BE-5.3 | BC-403 |
 | AC-BE-506 | BE-5.4 | BC-401 |
+| AC-BE-601 | BE-6.1/BE-6.2 | BC-501 |
+| AC-BE-602 | BE-6.1/BE-6.2 | BC-501 |
+| AC-BE-603 | BE-6.3 | BC-502 |
+| AC-BE-604 | BE-6.3/BE-6.5 | BC-502 |
+| AC-BE-605 | BE-6.4 | BC-503 |
+| AC-BE-606 | BE-6.5/BE-6.6 | BC-501/BC-502/BC-503 |

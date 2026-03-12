@@ -1,5 +1,5 @@
 # 前端检查清单 - user_management
-> Version: v0.4.0
+> Version: v0.5.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
@@ -41,6 +41,15 @@
 5. AC-FE-505：后端返回 `NO_ACTIVE_ORG` 时前端提示文案清晰且无静默失败。
 6. AC-FE-506：在不改接口结构的前提下，页面可兼容未来 `USER_SCOPED`（多组织选项渲染不报错）。
 
+### 1.5 Phase 6 功能（v0.5.0 新增）
+
+1. AC-FE-601：API Key 签发表单不再以手工 `userId` 文本输入作为主路径，改为成员联想选择。
+2. AC-FE-602：成员联想可按邮箱/显示名前缀返回候选，并支持空结果提示。
+3. AC-FE-603：`ORG_SCOPED` 下签发组织固定为当前组织；组织变化会清空已选成员。
+4. AC-FE-604：签发成功后可展示明文 key；列表中可展示目标成员邮箱/显示名。
+5. AC-FE-605：`NO_ACTIVE_ORG/PERMISSION_DENIED/RESOURCE_NOT_FOUND` 在签发场景下提示明确。
+6. AC-FE-606：未来 `USER_SCOPED` 分支下，组织下拉与成员候选联动不报错。
+
 ## 2. 契约对齐检查
 
 1. `04_frontend_contract.md` 中请求/响应类型与实际调用一致。
@@ -52,6 +61,9 @@
 7. 职能角色字段（`functionalRoleId/name/code`）与后端契约一致。
 8. `GET /api/auth/context` 响应字段与 `04_frontend_contract.md` 一致（`activeOrg/availableOrgs/scopeMode`）。
 9. 创建成员请求中的 `orgId` 若存在，来源必须是下拉选项，不允许任意文本。
+10. `GET /api/admin/member-options` 请求/响应字段与契约一致（`query/orgId/limit` + `items[]`）。
+11. `POST /api/admin/api-keys` 在 Phase 6 支持 `orgId?` 语义且前端行为与 `scopeMode` 对齐。
+12. `GET /api/admin/api-keys` 扩展字段 `userEmail/userDisplayName` 可兼容渲染。
 
 ## 3. 状态/异常/空态检查
 
@@ -62,6 +74,7 @@
 5. 管理页空列表时显示空态引导。
 6. 网络错误与服务错误展示区分明确。
 7. `VIEWER` 用户无写操作入口，`MEMBER` 不可访问他人数据入口。
+8. 联想输入快速变更时不会造成请求风暴或候选错位提交。
 
 ## 4. 回归检查
 
@@ -71,7 +84,7 @@
 4. 在不同角色账号下，按钮与页面可见性符合权限设计。
 5. 权限红线相关失败场景展示正确文案，不出现静默失败。
 
-## 5. 追踪映射（v0.4.0 增量）
+## 5. 追踪映射（v0.5.0 增量）
 
 | 验收项 | 关联任务 | 关联契约 |
 |---|---|---|
@@ -81,3 +94,9 @@
 | AC-FE-504 | FE-5.4 | FC-403 |
 | AC-FE-505 | FE-5.4 | FC-403 |
 | AC-FE-506 | FE-5.5 | FC-401 |
+| AC-FE-601 | FE-6.3 | FC-501 |
+| AC-FE-602 | FE-6.2 | FC-501 |
+| AC-FE-603 | FE-6.1 | FC-502 |
+| AC-FE-604 | FE-6.4 | FC-503 |
+| AC-FE-605 | FE-6.5 | FC-502 |
+| AC-FE-606 | FE-6.6 | FC-501/FC-502/FC-503 |

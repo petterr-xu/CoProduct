@@ -1,9 +1,9 @@
 # 前端技术落地方案 - user_management
-> Version: v0.4.0
+> Version: v0.5.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
-> Design Priority (v0.4.0): 若旧段落与 v0.4.0 新增规则冲突，以 v0.4.0 为准；v0.3.0 作为兼容基线保留。
+> Design Priority (v0.5.0): 若旧段落与 v0.5.0 新增规则冲突，以 v0.5.0 为准；v0.4.0 作为兼容基线保留。
 
 ## 1. 页面与交互范围
 
@@ -13,6 +13,7 @@
 2. 受保护业务页：未登录自动跳转。
 3. 用户信息入口：展示账号与权限角色。
 4. v0.4.0 新增：显示“当前组织”并在创建成员时提供组织下拉。
+5. v0.5.0 新增：API Key 签发支持“组织选择 + 成员联想搜索”，不再主打手输 `userId`。
 
 ### 1.2 管理侧范围（Phase 2 已完成，Phase 4 增强）
 
@@ -24,6 +25,10 @@
 3. 新增（Phase 5）：
 - 创建成员表单移除 `orgId` 文本输入，改为组织下拉。
 - 当 `AuthContext.activeOrg` 为空时，禁用创建成员并展示引导提示。
+4. 新增（Phase 6）：
+- API Key 签发表单支持按邮箱/显示名前缀搜索成员并选择目标。
+- API Key 签发在 `ORG_SCOPED` 下锁定组织，在 `USER_SCOPED` 预留组织切换。
+- API Key 列表展示成员可读信息（邮箱/显示名），减少 `userId` 认知负担。
 
 ## 2. 前端领域模型
 
@@ -70,6 +75,21 @@
 - `POST /api/admin/functional-roles`
 - `PATCH /api/admin/members/{id}/functional-role`
 3. 管理列表统一分页契约：`items/total/page/pageSize`。
+
+### 4.5 API Key 签发可用性升级（v0.5.0）
+
+1. 签发表单组织规则：
+- `ORG_SCOPED`：组织默认 `activeOrg` 且不可编辑。
+- `USER_SCOPED`（预留）：组织下拉来源 `availableOrgs`，切换组织后清空成员选择。
+2. 成员检索规则：
+- 新增调用 `GET /api/admin/member-options?orgId&query&limit`。
+- `query` 采用前缀匹配（邮箱/显示名），触发阈值建议 `>=2` 字符。
+- 组件仅允许从候选项中选择成员，不允许自由输入 `userId` 直接提交。
+3. 签发请求规则：
+- `POST /api/admin/api-keys` 提交 `userId/name/expiresAt`，并在 Phase 6 增加 `orgId?` 语义。
+- 若上下文无组织，禁用签发按钮并提示 `NO_ACTIVE_ORG`。
+4. API Key 列表可读性：
+- 在列表中展示 `userDisplayName/userEmail`；`userId` 作为次要信息保留。
 
 ### 4.4 上下文驱动组织选择（v0.4.0）
 
@@ -155,6 +175,13 @@
 3. 无组织场景 UI 引导与错误提示（`NO_ACTIVE_ORG`）。
 4. 为未来多组织登录保留 `USER_SCOPED` 展示与交互分支。
 
+### Phase 6（v0.5.0 新增）
+
+1. API Key 签发改为组织上下文驱动的成员联想选择。
+2. 新增成员检索 API 消费与自动补全组件。
+3. API Key 列表展示成员可读信息并保留 userId 辅助排障。
+4. `USER_SCOPED` 场景下保留组织切换分支，不破坏当前 `ORG_SCOPED`。
+
 ## 8. 风险与缓解
 
 1. 风险：后端规则先收紧导致前端按钮可点击但请求失败。
@@ -165,8 +192,12 @@
 - 缓解：映射函数提供兜底 `未知(<raw>)`，并打日志告警。
 4. 风险：上下文拉取失败导致管理页交互不可用。
 - 缓解：上下文加载失败时阻断高风险写操作，仅保留只读视图并提示重试。
+5. 风险：成员联想结果与最终签发目标不一致，导致误签发。
+- 缓解：候选项强类型绑定 `userId`，提交前必须存在已选候选且与当前组织匹配。
+6. 风险：成员检索接口高频触发导致管理页抖动或压测风险。
+- 缓解：前端增加防抖、最小输入长度与请求取消；后端 `limit` 上限固定。
 
-## 9. FE 追踪矩阵（v0.4.0 增量）
+## 9. FE 追踪矩阵（v0.5.0 增量）
 
 | TD ID | FE 模块 | API | 状态管理 | 错误处理 | 测试要点 |
 |---|---|---|---|---|---|
@@ -174,3 +205,8 @@
 | TD-402 | `features/admin-members` | `POST /api/admin/users` | 创建表单本地状态 | 禁止自由输入 orgId | 组织下拉仅来源于 context |
 | TD-403 | `features/admin-members` | 同上 | 提交前校验 activeOrg | `NO_ACTIVE_ORG` 提示引导 | 无 activeOrg 禁止创建 |
 | TD-404 | `features/auth-context` | `GET /api/auth/context` | `scopeMode` 分支 | 未知模式兜底 ORG_SCOPED | ORG_SCOPED/USER_SCOPED UI 分支 |
+| TD-501 | `features/admin-api-keys` | `POST /api/admin/api-keys` | 签发表单改为“已选成员”状态 | 禁止手输 userId 直提 | 候选选择/提交联动 |
+| TD-502 | `features/admin-api-keys` | `GET /api/admin/member-options` | 联想查询状态（防抖/取消） | 空候选与异常提示 | 前缀检索准确性 |
+| TD-503 | `features/admin-api-keys` | `POST /api/admin/api-keys` | org 上下文与表单双向约束 | 跨组织拒绝提示 | ORG_SCOPED/USER_SCOPED 分支 |
+| TD-504 | `features/admin-api-keys` | `GET /api/admin/api-keys` | 列表项视图模型增强 | 缺字段兜底展示 | 可读字段显示正确 |
+| TD-505 | `features/admin-api-keys` | `GET /api/auth/context` + 签发接口 | 组织选择分支预埋 | 未知 scopeMode 兜底 | 多组织预埋回归 |

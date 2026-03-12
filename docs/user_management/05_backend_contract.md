@@ -1,9 +1,9 @@
 # 后端契约文档 - user_management
-> Version: v0.4.0
+> Version: v0.5.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
-> Contract Priority (v0.4.0): 保留 `v0.3.0` 既有接口契约作为兼容基线；`v0.4.0` 新增段落定义演进后规则。
+> Contract Priority (v0.5.0): 保留 `v0.4.0` 既有接口契约作为兼容基线；`v0.5.0` 新增段落定义演进后规则。
 
 ## 1. API 列表（Method + Path）
 
@@ -24,6 +24,7 @@
 5. `POST /api/admin/api-keys`
 6. `GET /api/admin/api-keys`
 7. `POST /api/admin/api-keys/{key_id}/revoke`
+8. `GET /api/admin/member-options`（v0.5.0 新增）
 
 ### 1.2A 管理域（v0.3.0 对已有接口的补充约束）
 
@@ -120,6 +121,7 @@ v0.2.0 生效规则：
 2. 更新状态：`status in [ACTIVE, DISABLED, PENDING_INVITE]`。
 3. 更新角色：`role in [OWNER, ADMIN, MEMBER, VIEWER]`。
 4. 签发密钥：`userId/name` 必填；`expiresAt` 可选 ISO 时间。
+5. v0.5.0：签发密钥新增 `orgId?` 兼容字段；成员检索通过 `GET /api/admin/member-options` 提供候选。
 
 ### 2.4A `GET /api/auth/context`（v0.4.0 新增）
 
@@ -171,15 +173,27 @@ v0.4.0 生效规则：
 ```json
 {
   "userId": "usr_xxx",
+  "orgId": "org_default",
   "name": "team-laptop",
   "expiresAt": "2026-06-01T00:00:00Z"
 }
 ```
 
+`orgId` 字段语义（v0.5.0）：
+
+1. 兼容可选字段；缺省时默认 `current_user.org_id`。
+2. 在 `ORG_SCOPED` 下若传入且不等于 `current_user.org_id`，返回 `403 PERMISSION_DENIED`。
+3. 在未来 `USER_SCOPED` 下，`orgId` 必须属于 `availableOrgs` 且目标成员在该组织存在 membership。
+
 6. `GET /api/admin/api-keys`
-- Query: `userId?: string`, `status?: ApiKeyStatus`, `page?: number=1`, `pageSize?: number=20(max 100)`。
+- Query: `userId?: string`, `orgId?: string`, `status?: ApiKeyStatus`, `page?: number=1`, `pageSize?: number=20(max 100)`。
 7. `POST /api/admin/api-keys/{key_id}/revoke`
 - 请求体：空对象 `{}`。
+
+8. `GET /api/admin/member-options`（v0.5.0 新增）
+- Query: `query: string(>=2)`, `orgId?: string`, `limit?: number=20(max 50)`。
+- 语义：仅返回当前可管理组织内、可签发目标的成员候选。
+- 匹配：邮箱与显示名前缀匹配（prefix search）。
 
 ### 2.6 管理接口请求细化（v0.3.0 新增）
 
@@ -379,6 +393,8 @@ v0.2.0 登录响应：
     {
       "keyId": "key_xxx",
       "userId": "usr_xxx",
+      "userEmail": "member@coproduct.dev",
+      "userDisplayName": "Member A",
       "keyPrefix": "cpk_live_12ab",
       "status": "ACTIVE",
       "name": "team-laptop",
@@ -390,6 +406,24 @@ v0.2.0 登录响应：
   "total": 1,
   "page": 1,
   "pageSize": 20
+}
+```
+
+`GET /api/admin/member-options` 响应（v0.5.0 新增）：
+
+```json
+{
+  "items": [
+    {
+      "userId": "usr_xxx",
+      "membershipId": "mem_xxx",
+      "email": "member@coproduct.dev",
+      "displayName": "Member A",
+      "permissionRole": "MEMBER",
+      "memberStatus": "ACTIVE",
+      "orgId": "org_default"
+    }
+  ]
 }
 ```
 
@@ -526,6 +560,14 @@ v0.2.0 登录响应：
 | `POST /api/admin/users` | 组织来源受当前上下文约束；不允许跨组织创建成员 |
 | 管理写接口（`/api/admin/*`） | 当 `activeOrg` 缺失时返回 `NO_ACTIVE_ORG`，拒绝写入 |
 
+### 4.6 v0.5.0 API Key 签发可用性与组织规则（新增）
+
+| 接口 | 规则 |
+|---|---|
+| `GET /api/admin/member-options` | `query` 最小长度 2；返回结果必须属于目标组织上下文 |
+| `POST /api/admin/api-keys` | `userId` 目标成员必须在目标组织存在可用 membership；跨组织组合返回 `PERMISSION_DENIED/RESOURCE_NOT_FOUND` |
+| `GET /api/admin/api-keys` | 可按 `orgId` 过滤；响应可附带 `userEmail/userDisplayName` 便于管理 |
+
 ## 5. 与前端契约对齐说明
 
 1. 与 `04_frontend_contract.md` 路径、字段名、枚举值逐项对齐。
@@ -534,11 +576,15 @@ v0.2.0 登录响应：
 4. 新增业务字段（`orgId/createdByUserId`）应为可选，避免旧前端解析失败。
 5. 管理接口演进遵循“旧接口保留 + 新接口追加”策略，兼容期允许双路由并存。
 6. v0.4.0 新增 `GET /api/auth/context`，与前端 `AuthContextResponse` 字段一一对齐。
+7. v0.5.0 新增 `GET /api/admin/member-options`，用于签发前成员检索，避免前端依赖手工 userId 输入。
 
-## 6. Contract Item IDs（v0.4.0 增量）
+## 6. Contract Item IDs（v0.5.0 增量）
 
 | Contract ID | 说明 | 关联端点 |
 |---|---|---|
 | BC-401 | 登录上下文接口契约（`activeOrg/availableOrgs/scopeMode`） | `GET /api/auth/context` |
 | BC-402 | 创建成员组织约束契约（`orgId` 兼容字段收敛） | `POST /api/admin/users` |
 | BC-403 | 无组织上下文拒绝契约 | 管理写接口 + `NO_ACTIVE_ORG` |
+| BC-501 | API Key 目标成员检索契约 | `GET /api/admin/member-options` |
+| BC-502 | API Key 签发组织语义契约 | `POST /api/admin/api-keys` + `orgId?` |
+| BC-503 | API Key 列表可读字段扩展契约 | `GET /api/admin/api-keys` + `userEmail/userDisplayName` |

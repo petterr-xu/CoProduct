@@ -1,9 +1,9 @@
 # 后端技术落地方案 - user_management
-> Version: v0.4.0
+> Version: v0.5.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
-> Design Priority (v0.4.0): 若旧段落与 v0.4.0 新增规则冲突，以 v0.4.0 为准；v0.3.0 作为兼容基线保留。
+> Design Priority (v0.5.0): 若旧段落与 v0.5.0 新增规则冲突，以 v0.5.0 为准；v0.4.0 作为兼容基线保留。
 
 ## 1. 模块边界与服务分层
 
@@ -15,6 +15,7 @@
 4. `app/services/admin_user_service.py`：用户/密钥/审计管理能力。
 5. `app/repositories/user_repository.py`：用户域持久化。
 6. `app/models/user_management.py`：组织、用户、成员关系、密钥、会话、审计。
+7. v0.5.0 新增：`app/api/admin_member_options.py`（或并入 admin API）用于签发前成员检索。
 
 ### 1.2 v0.3.0 新增模块
 
@@ -131,6 +132,20 @@ sequenceDiagram
 3. 兼容性原则：
 - 保留旧请求结构，先收紧语义约束，再推进字段收敛。
 
+### 3.5 API Key 签发目标检索与组织语义（v0.5.0）
+
+1. 新增成员检索接口（签发前置）：
+- `GET /api/admin/member-options`，按 `orgId + query(prefix)` 返回可签发目标成员。
+- 返回字段控制在最小集合：`userId/email/displayName/membershipStatus/permissionRole/orgId`。
+2. 签发请求组织语义增强：
+- `POST /api/admin/api-keys` 在保留 `userId` 的同时新增 `orgId?`（兼容字段）。
+- `orgId` 缺省时默认 `current_user.org_id`；传入时必须与授权组织一致。
+3. 安全校验：
+- 目标成员必须在目标组织存在可用 membership。
+- 跨组织 `userId/orgId` 组合稳定拒绝并写 `FAILED` 审计。
+4. 列表可读性增强：
+- `GET /api/admin/api-keys` 响应补充 `userEmail/userDisplayName`，`userId` 保留用于排障与审计关联。
+
 ## 4. 持久化与迁移策略
 
 ### 4.1 新增与变更表（Phase 4）
@@ -206,6 +221,13 @@ sequenceDiagram
 3. 新增 `NO_ACTIVE_ORG` 错误码与审计事件，明确无组织场景行为。
 4. 为后续多组织登录准备 `scopeMode` 与组织列表查询能力。
 
+### Phase 6（v0.5.0 新增）
+
+1. 新增签发前成员检索接口（组织内前缀匹配）。
+2. API Key 签发请求增加组织语义并强化跨组织校验。
+3. API Key 列表增加成员可读字段（邮箱/显示名）。
+4. 对 `ORG_SCOPED/USER_SCOPED` 的组织选择约束保持契约稳定。
+
 ## 8. 风险点与缓解（v0.3.0）
 
 1. 风险：权限收紧后历史自动化脚本失败。
@@ -217,7 +239,7 @@ sequenceDiagram
 4. 风险：上下文口径与前端假设不一致，导致页面行为偏差。
 - 缓解：`auth/context` 作为唯一上下文事实来源；`auth/me` 仅保留基础身份展示。
 
-## 9. BE 追踪矩阵（v0.4.0 增量）
+## 9. BE 追踪矩阵（v0.5.0 增量）
 
 | TD ID | BE 模块 | API | 数据/约束 | 守卫与错误 | 测试要点 |
 |---|---|---|---|---|---|
@@ -225,11 +247,19 @@ sequenceDiagram
 | TD-402 | `api/admin_users.py` + `admin_user_service.py` | `POST /api/admin/users` | 废弃自由输入 org 语义 | 跨组织返回 403 | 组织来源受控 |
 | TD-403 | `admin_user_service.py` | 同上 | `current_user.org_id` 必须存在 | `NO_ACTIVE_ORG` | 无组织场景回归 |
 | TD-404 | `auth_service.py` | `GET /api/auth/context` | `scopeMode` 扩展位 | 未知模式降级 | ORG_SCOPED/USER_SCOPED 兼容 |
+| TD-501 | `api/admin_api_keys.py` + `admin_user_service.py` | `POST /api/admin/api-keys` | 签发目标来源于成员候选选择 | 参数缺失返回 422 | 选择目标后签发成功 |
+| TD-502 | `api/admin_member_options.py` + `user_repository.py` | `GET /api/admin/member-options` | 按 org + query 前缀检索成员 | 非法 query/无权限返回 4xx | 检索结果准确且受组织隔离 |
+| TD-503 | `admin_user_service.py` | `POST /api/admin/api-keys` | `orgId` 与目标 membership 一致性校验 | 跨组织返回 403 | 跨组织签发拒绝 |
+| TD-504 | `user_repository.py` + `admin_api_keys.py` | `GET /api/admin/api-keys` | 响应补充 `userEmail/userDisplayName` | 缺失时兜底空值 | 列表可读字段完整 |
+| TD-505 | `auth_service.py` + `admin_user_service.py` | `GET /api/auth/context` + 签发接口 | `scopeMode` 分支与组织约束稳定 | 未知模式回落 | USER_SCOPED 预埋回归 |
 
-## 10. 风险实现计划（v0.4.0 增量）
+## 10. 风险实现计划（v0.5.0 增量）
 
 | 风险 | 缓解策略 | 代码级实现 |
 |---|---|---|
 | 前端手填 orgId 造成越权歧义 | 服务端忽略自由输入来源，强制校验当前组织 | `AdminUserService.create_user` 组织归属判定 |
 | 上下文信息散落在多个接口 | 提供单一 `auth/context` 入口 | `GET /api/auth/context` + 统一 response model |
 | 无组织用户行为不确定 | 新增专用错误码与审计 | `NO_ACTIVE_ORG` + audit `FAILED` 事件 |
+| API Key 手输 userId 误操作率高 | 提供成员检索接口并约束提交来源 | `GET /api/admin/member-options` + 前端候选绑定 |
+| 多组织扩展后 API Key 签发组织语义模糊 | 签发请求增加 `orgId` 语义并统一服务层校验 | `AdminUserService.issue_api_key` 组织判定逻辑 |
+| API Key 列表可读性不足 | 查询时联表补充邮箱/显示名 | `list_api_keys` 响应模型扩展 |
