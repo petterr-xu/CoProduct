@@ -24,6 +24,7 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const authContext = useAuthStore((state) => state.authContext);
   const clearSession = useAuthStore((state) => state.clearSession);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -92,6 +93,9 @@ export function AppShell({ children }: AppShellProps) {
                 <span>{user.displayName}</span>
                 <span className='rounded border border-black/10 bg-panel px-1.5 py-0.5 text-[10px] text-ink'>
                   {ROLE_LABEL_MAP[user.role]}
+                </span>
+                <span className='rounded border border-black/10 bg-panel px-1.5 py-0.5 text-[10px] text-ink'>
+                  {authContext?.activeOrg?.orgName ?? '无组织'}
                 </span>
                 <button
                   type='button'
