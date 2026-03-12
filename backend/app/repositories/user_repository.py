@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from sqlalchemy import Select, and_, func, select
+from sqlalchemy import Select, and_, desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import ApiKeyModel, AuditLogModel, AuthSessionModel, MembershipModel, OrganizationModel, UserModel
@@ -47,6 +47,16 @@ class UserRepository:
         self.db.flush()
         return user
 
+    def update_user_status(self, *, user_id: str, status: str) -> UserModel | None:
+        user = self.db.get(UserModel, user_id)
+        if user is None:
+            return None
+        user.status = status
+        user.disabled_at = utc_now() if status == "DISABLED" else None
+        self.db.add(user)
+        self.db.flush()
+        return user
+
     def touch_last_login(self, user_id: str) -> None:
         user = self.db.get(UserModel, user_id)
         if user is None:
@@ -61,6 +71,72 @@ class UserRepository:
             .limit(1)
         )
         return self.db.execute(stmt).scalar_one_or_none()
+
+    def update_membership_role(self, *, user_id: str, org_id: str, role: str) -> MembershipModel | None:
+        membership = self.get_membership(user_id=user_id, org_id=org_id)
+        if membership is None:
+            return None
+        membership.role = role
+        self.db.add(membership)
+        self.db.flush()
+        return membership
+
+    def list_users(
+        self,
+        *,
+        org_id: str,
+        query: str | None,
+        role: str | None,
+        status: str | None,
+        page: int,
+        page_size: int,
+    ) -> tuple[int, list[dict]]:
+        filters = [MembershipModel.org_id == org_id]
+        if query:
+            pattern = f"%{query.strip()}%"
+            filters.append(
+                or_(
+                    UserModel.email.ilike(pattern),
+                    UserModel.display_name.ilike(pattern),
+                )
+            )
+        if role:
+            filters.append(MembershipModel.role == role)
+        if status:
+            filters.append(UserModel.status == status)
+
+        total_stmt = (
+            select(func.count(UserModel.id))
+            .select_from(UserModel)
+            .join(MembershipModel, MembershipModel.user_id == UserModel.id)
+            .where(and_(*filters))
+        )
+        total = int(self.db.execute(total_stmt).scalar_one() or 0)
+
+        rows = self.db.execute(
+            select(UserModel, MembershipModel)
+            .select_from(UserModel)
+            .join(MembershipModel, MembershipModel.user_id == UserModel.id)
+            .where(and_(*filters))
+            .order_by(desc(UserModel.created_at))
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).all()
+
+        items = [
+            {
+                "id": user.id,
+                "email": user.email,
+                "displayName": user.display_name,
+                "role": membership.role,
+                "status": user.status,
+                "orgId": membership.org_id,
+                "createdAt": user.created_at.isoformat() if user.created_at else "",
+                "lastLoginAt": user.last_login_at.isoformat() if user.last_login_at else None,
+            }
+            for user, membership in rows
+        ]
+        return total, items
 
     def get_active_membership(self, *, user_id: str, org_id: str) -> MembershipModel | None:
         stmt: Select[tuple[MembershipModel]] = (
@@ -131,6 +207,75 @@ class UserRepository:
             return
         api_key.last_used_at = utc_now()
         self.db.add(api_key)
+
+    def list_api_keys(
+        self,
+        *,
+        org_id: str,
+        user_id: str | None,
+        status: str | None,
+        page: int,
+        page_size: int,
+    ) -> tuple[int, list[dict]]:
+        filters = [ApiKeyModel.org_id == org_id]
+        if user_id:
+            filters.append(ApiKeyModel.user_id == user_id)
+        if status:
+            filters.append(ApiKeyModel.status == status)
+
+        total_stmt = select(func.count(ApiKeyModel.id)).where(and_(*filters))
+        total = int(self.db.execute(total_stmt).scalar_one() or 0)
+
+        rows = self.db.execute(
+            select(ApiKeyModel)
+            .where(and_(*filters))
+            .order_by(desc(ApiKeyModel.created_at))
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).scalars()
+
+        items = [
+            {
+                "keyId": item.id,
+                "userId": item.user_id,
+                "keyPrefix": item.key_prefix,
+                "status": item.status,
+                "name": item.name,
+                "expiresAt": item.expires_at.isoformat() if item.expires_at else None,
+                "lastUsedAt": item.last_used_at.isoformat() if item.last_used_at else None,
+                "createdAt": item.created_at.isoformat() if item.created_at else "",
+            }
+            for item in rows
+        ]
+        return total, items
+
+    def revoke_api_key_and_sessions(self, *, key_id: str, org_id: str) -> tuple[ApiKeyModel | None, int]:
+        api_key = self.get_api_key(key_id)
+        if api_key is None or api_key.org_id != org_id:
+            return None, 0
+
+        if api_key.status != "REVOKED":
+            api_key.status = "REVOKED"
+            api_key.revoked_at = utc_now()
+            self.db.add(api_key)
+
+        sessions = list(
+            self.db.execute(
+                select(AuthSessionModel).where(
+                    and_(
+                        AuthSessionModel.api_key_id == key_id,
+                        AuthSessionModel.status == "ACTIVE",
+                    )
+                )
+            ).scalars()
+        )
+        for session in sessions:
+            session.status = "REVOKED"
+            session.revoked_at = utc_now()
+            self.db.add(session)
+
+        self.db.flush()
+        return api_key, len(sessions)
 
     def create_auth_session(
         self,
@@ -241,3 +386,45 @@ class UserRepository:
         self.db.add(item)
         self.db.flush()
         return item
+
+    def list_audit_logs(
+        self,
+        *,
+        org_id: str,
+        actor_user_id: str | None,
+        action: str | None,
+        page: int,
+        page_size: int,
+    ) -> tuple[int, list[dict]]:
+        filters = [AuditLogModel.org_id == org_id]
+        if actor_user_id:
+            filters.append(AuditLogModel.actor_user_id == actor_user_id)
+        if action:
+            filters.append(AuditLogModel.action == action)
+
+        total_stmt = select(func.count(AuditLogModel.id)).where(and_(*filters))
+        total = int(self.db.execute(total_stmt).scalar_one() or 0)
+
+        rows = self.db.execute(
+            select(AuditLogModel)
+            .where(and_(*filters))
+            .order_by(desc(AuditLogModel.created_at))
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).scalars()
+
+        items = [
+            {
+                "id": item.id,
+                "orgId": item.org_id,
+                "actorUserId": item.actor_user_id,
+                "targetType": item.target_type,
+                "targetId": item.target_id,
+                "action": item.action,
+                "result": item.result,
+                "meta": json.loads(item.meta_json or "{}"),
+                "createdAt": item.created_at.isoformat() if item.created_at else "",
+            }
+            for item in rows
+        ]
+        return total, items

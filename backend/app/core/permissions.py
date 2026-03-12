@@ -20,3 +20,6 @@ def require_role(user: CurrentUserContext, allowed_roles: set[str], *, message: 
 def require_write_permission(user: CurrentUserContext) -> None:
     require_role(user, {"OWNER", "ADMIN", "MEMBER"}, message="Write permission required")
 
+
+def require_admin_permission(user: CurrentUserContext) -> None:
+    require_role(user, {"OWNER", "ADMIN"}, message="Admin permission required")
