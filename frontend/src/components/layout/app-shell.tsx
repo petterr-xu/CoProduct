@@ -2,10 +2,12 @@
 
 import type { Route } from 'next';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { ReactNode } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { ReactNode, useMemo, useState } from 'react';
 
+import { authClient } from '@/lib/auth-client';
 import { cn } from '@/lib/utils';
+import { isWriteRole, useAuthStore } from '@/stores/auth-store';
 
 type AppShellProps = {
   children: ReactNode;
@@ -17,26 +19,42 @@ type NavItem = {
   isActive: (pathname: string) => boolean;
 };
 
-const NAV_ITEMS: NavItem[] = [
-  {
-    href: '/',
-    label: '首页',
-    isActive: (pathname) => pathname === '/'
-  },
-  {
-    href: '/prereview/new',
-    label: '新建预审',
-    isActive: (pathname) => pathname.startsWith('/prereview')
-  },
-  {
-    href: '/history',
-    label: '历史记录',
-    isActive: (pathname) => pathname.startsWith('/history')
-  }
-];
-
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, clearSession } = useAuthStore((state) => ({
+    user: state.user,
+    clearSession: state.clearSession
+  }));
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const isLoginRoute = pathname === '/login';
+  const navItems = useMemo(() => {
+    const base: NavItem[] = [
+      {
+        href: '/',
+        label: '首页',
+        isActive: (name) => name === '/'
+      },
+      {
+        href: '/history',
+        label: '历史记录',
+        isActive: (name) => name.startsWith('/history')
+      }
+    ];
+    if (isWriteRole(user?.role)) {
+      base.splice(1, 0, {
+        href: '/prereview/new',
+        label: '新建预审',
+        isActive: (name) => name.startsWith('/prereview')
+      });
+    }
+    return base;
+  }, [user?.role]);
+
+  if (isLoginRoute) {
+    return <div className='min-h-screen'>{children}</div>;
+  }
 
   return (
     <div className='min-h-screen'>
@@ -46,7 +64,7 @@ export function AppShell({ children }: AppShellProps) {
             CoProduct
           </Link>
           <nav className='flex flex-wrap items-center gap-2'>
-            {NAV_ITEMS.map((item) => {
+            {navItems.map((item) => {
               const active = item.isActive(pathname);
               return (
                 <Link
@@ -63,6 +81,32 @@ export function AppShell({ children }: AppShellProps) {
                 </Link>
               );
             })}
+            {user ? (
+              <div className='ml-1 flex items-center gap-2 rounded-md border border-black/15 bg-white px-2.5 py-1.5 text-xs text-muted'>
+                <span>{user.displayName}</span>
+                <span className='rounded border border-black/10 bg-panel px-1.5 py-0.5 text-[10px] text-ink'>{user.role}</span>
+                <button
+                  type='button'
+                  disabled={isLoggingOut}
+                  className='rounded border border-black/20 px-2 py-0.5 text-[11px] text-ink disabled:opacity-60'
+                  onClick={async () => {
+                    if (isLoggingOut) return;
+                    setIsLoggingOut(true);
+                    try {
+                      await authClient.logout();
+                    } catch {
+                      // ignore logout transport errors and enforce local sign-out
+                    } finally {
+                      clearSession();
+                      setIsLoggingOut(false);
+                      router.replace('/login' as Route);
+                    }
+                  }}
+                >
+                  {isLoggingOut ? '退出中' : '退出'}
+                </button>
+              </div>
+            ) : null}
           </nav>
         </div>
       </header>

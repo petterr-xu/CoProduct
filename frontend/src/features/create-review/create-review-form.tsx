@@ -11,6 +11,7 @@ import { SubmitButton } from '@/components/base/submit-button';
 import { useCreatePrereview } from '@/hooks/use-prereview-api';
 import { getApiErrorMessage } from '@/lib/api-client';
 import { createReviewSchema, CreateReviewSchema } from '@/schemas/create-review';
+import { isWriteRole, useAuthStore } from '@/stores/auth-store';
 import { useCreateReviewDraftStore } from '@/stores/create-review-draft';
 
 const DRAFT_KEY = 'coproduct:create-review:draft';
@@ -22,6 +23,8 @@ export function CreateReviewForm() {
   const router = useRouter();
   const mutation = useCreatePrereview();
   const draftStore = useCreateReviewDraftStore();
+  const role = useAuthStore((state) => state.user?.role);
+  const canWrite = isWriteRole(role);
 
   const defaults = useMemo(
     () => ({
@@ -76,6 +79,7 @@ export function CreateReviewForm() {
   }, [draftStore, watch]);
 
   const onSubmit = handleSubmit(async (values) => {
+    if (!canWrite) return;
     const result = await mutation.mutateAsync({
       requirementText: values.requirementText,
       backgroundText: values.backgroundText,
@@ -89,12 +93,14 @@ export function CreateReviewForm() {
   return (
     <form className='space-y-4' onSubmit={onSubmit}>
       {mutation.error ? <ErrorAlert message={getApiErrorMessage(mutation.error)} /> : null}
+      {!canWrite ? <ErrorAlert title='当前账号只读' message='VIEWER 角色不可发起预审，请联系管理员分配写权限。' /> : null}
 
       <div className='space-y-1'>
         <label className='text-sm font-medium'>需求描述 *</label>
         <textarea
           className='min-h-36 w-full rounded-md border border-black/20 bg-white p-3 text-sm outline-none focus:border-black/50'
           placeholder='请输入业务需求描述'
+          disabled={!canWrite}
           {...register('requirementText')}
         />
         <p className='text-xs text-danger'>{errors.requirementText?.message}</p>
@@ -105,6 +111,7 @@ export function CreateReviewForm() {
         <textarea
           className='min-h-24 w-full rounded-md border border-black/20 bg-white p-3 text-sm outline-none focus:border-black/50'
           placeholder='补充背景、动因和现状'
+          disabled={!canWrite}
           {...register('backgroundText')}
         />
       </div>
@@ -115,6 +122,7 @@ export function CreateReviewForm() {
           <input
             className='w-full rounded-md border border-black/20 bg-white px-3 py-2 text-sm outline-none focus:border-black/50'
             placeholder='如 activity'
+            disabled={!canWrite}
             {...register('businessDomain')}
           />
         </div>
@@ -123,6 +131,7 @@ export function CreateReviewForm() {
           <input
             className='w-full rounded-md border border-black/20 bg-white px-3 py-2 text-sm outline-none focus:border-black/50'
             placeholder='如 registration'
+            disabled={!canWrite}
             {...register('moduleHint')}
           />
         </div>
@@ -130,14 +139,17 @@ export function CreateReviewForm() {
 
       <div className='space-y-1'>
         <label className='text-sm font-medium'>附件</label>
-        <FileUploader files={attachments} onChange={(files) => setValue('attachments', files)} />
+        <FileUploader files={attachments} onChange={(files) => setValue('attachments', files)} disabled={!canWrite} />
       </div>
 
       <div className='flex flex-wrap items-center gap-2'>
-        <SubmitButton loading={mutation.isPending}>发起预审</SubmitButton>
+        <SubmitButton loading={mutation.isPending} disabled={!canWrite}>
+          发起预审
+        </SubmitButton>
         <button
           type='button'
-          className='rounded-md border border-black/20 bg-white px-3 py-2 text-sm'
+          className='rounded-md border border-black/20 bg-white px-3 py-2 text-sm disabled:opacity-60'
+          disabled={!canWrite}
           onClick={() => setValue('requirementText', EXAMPLE_TEXT)}
         >
           一键填充示例

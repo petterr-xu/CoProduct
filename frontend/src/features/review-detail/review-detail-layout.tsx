@@ -18,6 +18,7 @@ import { SummaryCard } from '@/components/business/summary-card';
 import { UncertaintiesCard } from '@/components/business/uncertainties-card';
 import { usePrereviewDetail, useRegeneratePrereview } from '@/hooks/use-prereview-api';
 import { getApiErrorMessage, isApiClientError } from '@/lib/api-client';
+import { isWriteRole, useAuthStore } from '@/stores/auth-store';
 
 type Props = {
   sessionId: string;
@@ -27,6 +28,8 @@ export function ReviewDetailLayout({ sessionId }: Props) {
   const router = useRouter();
   const detailQuery = usePrereviewDetail(sessionId);
   const regenerateMutation = useRegeneratePrereview(sessionId);
+  const role = useAuthStore((state) => state.user?.role);
+  const canWrite = isWriteRole(role);
 
   if (detailQuery.isLoading) {
     return <LoadingSkeleton />;
@@ -76,6 +79,7 @@ export function ReviewDetailLayout({ sessionId }: Props) {
       </div>
 
       <RegeneratePanel
+        disabled={!canWrite}
         loading={regenerateMutation.isPending}
         onSubmit={async ({ additionalContext, attachments }) => {
           const result = await regenerateMutation.mutateAsync({ additionalContext, attachments });
