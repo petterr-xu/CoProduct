@@ -1,31 +1,38 @@
-# CoProduct 系统文档索引
-> Version: v0.1.1
-> Last Updated: 2026-03-12
-> Status: Active
+Title: CoProduct System Documentation Index
+Version: v1.0.0
+Last Updated: 2026-03-13
+Scope: docs/system 全量系统文档导航
+Audience: Engineers, reviewers, maintainers
 
-本目录用于沉淀当前 **MVP（后端 M3 + 前端 M3.1）** 的系统级说明，内容基于 `docs/mvp` 文档与当前代码实现（`backend/` + `frontend/`）对齐。
+# CoProduct System Documentation
 
-## 文档列表
+本目录描述当前代码实现（`backend/` + `frontend/`）下的系统现状，按三层组织：
 
-1. [系统全景介绍](./system_overview.md)
-2. [后端架构与模块关系](./backend_architecture.md)
-3. [后端 Service 层详解](./backend_services.md)
-4. [后端 API 参考（重要接口详解）](./backend_api_reference.md)
-5. [核心 Agent 编排器（PreReview Orchestrator）](./agent_orchestrator.md)
-6. [RAG 模块设计与演进方向](./rag_design.md)
-7. [数据模型与持久化设计](./data_and_persistence.md)
-8. [前端架构与交互链路](./frontend_architecture.md)
-9. [运行与联调手册](./ops_and_runbook.md)
-10. [系统现状评估与下一期开发方向](./improvement_and_next_phase.md)
+1. 系统级（整体目标、架构、安全治理、运维）
+2. 子系统级（前端、后端）
+3. 能力模块级（用户与认证、预审 Agent、RAG）
 
-## 阅读建议
+## 1. System-Level Documents
 
-1. 首先阅读「系统全景介绍」，快速建立整体认知。  
-2. 其次阅读「后端架构」+「Service 层详解」+「核心 Agent 编排器」，理解服务主链路。  
-3. 再阅读「RAG 模块」与「后端 API 参考」，理解证据与接口契约。  
-4. 最后阅读「前端架构」「数据模型与持久化」「运行手册」「下一期方向」。
+1. [System Overview](./system_overview.md)
+2. [System Architecture](./system_architecture.md)
+3. [Security and Governance](./security_and_governance.md)
+4. [Operations Runbook](./operations_runbook.md)
 
-## 版本说明
+## 2. Subsystem-Level Documents
 
-- 本目录首版聚焦“当前可运行实现”，强调 **代码事实**，不再重复纯规划内容。
-- 若后续对接口、状态枚举、工作流节点顺序、数据结构有修改，应同步更新对应文档。
+1. [Backend Overview](./backend_overview.md)
+2. [Frontend Overview](./frontend_overview.md)
+
+## 3. Capability Module Documents
+
+1. [User Management and Auth](./modules/user-management-and-auth.md)
+2. [PreReview Agent](./modules/prereview-agent.md)
+3. [RAG Retrieval](./modules/rag-retrieval.md)
+
+## Recommended Reading Order
+
+1. 先读 `system_overview.md` 了解系统边界与能力图。
+2. 再读 `system_architecture.md` 和 `security_and_governance.md` 理解关键约束。
+3. 按角色阅读 `backend_overview.md` / `frontend_overview.md`。
+4. 最后深入各模块文档查看 API 与数据模型细节。
