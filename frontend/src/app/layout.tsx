@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 import { Providers } from '@/app/providers';
+import { RouteGuard } from '@/components/auth/route-guard';
 import { AppShell } from '@/components/layout/app-shell';
 import '@/styles/globals.css';
 
@@ -19,7 +20,9 @@ export default function RootLayout({ children }: LayoutProps) {
     <html lang='zh-CN'>
       <body>
         <Providers>
-          <AppShell>{children}</AppShell>
+          <RouteGuard>
+            <AppShell>{children}</AppShell>
+          </RouteGuard>
         </Providers>
       </body>
     </html>
