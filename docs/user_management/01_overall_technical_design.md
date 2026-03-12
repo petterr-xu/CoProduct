@@ -1,208 +1,185 @@
 # 总体技术设计方案 - user_management
-> Version: v0.2.0
+> Version: v0.3.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
+> Design Priority (v0.3.0): 若旧段落与 v0.3.0 新增规则冲突，以 v0.3.0 为准。
+
 ## 1. 背景与目标
 
-当前系统仍使用单一全局 `COPRODUCT_API_TOKEN` 做鉴权，存在以下问题：
+当前系统在完成 Phase 1/2 后已具备基础认证与管理能力，但仍存在治理层面的关键缺口：
 
-1. 无用户身份，无法区分“谁发起了预审/上传文件”。
-2. 无团队权限边界，历史数据天然全局可见，缺少团队管理能力。
-3. 无会话管理与审计能力，无法满足后续团队协作与治理需求。
+1. `OWNER/ADMIN` 权限边界不清晰，治理风险仍高。
+2. 缺少“危险操作红线”约束（如自降权、自禁用、组织无 owner）。
+3. 用户建模仍偏粗糙，未清晰拆分“全局身份”与“组织内身份”。
+4. 缺少成员“职能角色”（如产品经理、运营）建模，不利于团队协作与审计。
 
-本需求目标：
+本版本目标：
 
-1. 建立可用的用户体系，支持“API Key 登录 -> Token 调用业务 API”。
-2. 业务数据绑定用户与组织，默认做到最小权限隔离。
-3. 在不优先开发复杂 Admin UI 的前提下，先把后端治理能力和前后端契约打稳。
-4. 预留后续组织化管理、邀请制注册、SSO 接入扩展点。
+1. 建立清晰且可扩展的身份域建模：`UserAccount` + `OrgMembership`。
+2. 固化权限红线与组织治理规则，避免管理员误操作导致系统失管。
+3. 新增“职能角色（Functional Role）”模型，约束一个成员仅绑定一个职能角色。
+4. 在兼容现有接口的前提下，明确后续成员管理 API 的演进方向。
 
 ## 2. 范围（In/Out）
 
-### 2.1 In Scope
+### 2.1 In Scope（v0.3.0 新增）
 
-1. 认证模型升级：
-- API Key 仅用于登录入口。
-- 业务调用改为短期 Access Token（JWT）+ Refresh Token。
-2. 用户与组织基础模型：
-- `organizations/users/memberships/api_keys/auth_sessions/audit_logs`。
-3. RBAC 基础权限：`OWNER/ADMIN/MEMBER/VIEWER`。
-4. 数据归属补齐：预审请求、会话、上传文件写入 `org_id/created_by_user_id`。
-5. 管理能力先通过后端 API 提供，不强依赖完整 Admin UI。
+1. 身份模型细化：
+- 全局身份：`users`（账号维度，跨组织唯一）。
+- 组织内身份：`memberships`（组织维度，承载权限角色与成员状态）。
+2. 权限模型细化：
+- 明确 `OWNER` 与 `ADMIN` 的差异化边界。
+- 增加治理红线约束与失败审计。
+3. 职能角色模型：
+- 新增 `org_function_roles`。
+- `memberships.functional_role_id` 单值绑定（每个成员仅一个职能角色）。
+4. 管理 API 演进：
+- 在保留 `/api/admin/users/*` 兼容路径下，逐步引入 `/api/admin/members/*` 语义。
 
 ### 2.2 Out of Scope（本轮不做）
 
 1. 企业级 SSO（OIDC/SAML）完整接入。
-2. 多组织切换 UI 与复杂权限策略（ABAC）可视化编辑。
-3. 细粒度资源授权（字段级、文档级 ACL）。
+2. 多组织切换 UI 与跨组织委派管理。
+3. 细粒度 ABAC 策略编辑器与工作流审批。
 
 ## 3. 总体架构与关键流程
 
 ### 3.1 架构摘要
 
-1. 新增认证域：`auth api + auth service + user repository + token provider`。
-2. 原业务域（prereview/files/history）改为依赖 `get_current_user`。
-3. 前端新增登录态管理层，统一给 API 请求附加 Access Token。
-4. 管理员操作（用户开通、密钥签发/吊销）通过后端管理接口完成。
+1. 认证域：`auth api + auth service + token provider + session repository`。
+2. 身份域：`users + memberships + org_function_roles`。
+3. 治理域：`admin member/key/audit APIs + policy guard`。
+4. 前端分层：认证状态层、权限门禁层、管理端领域层（成员/职能/密钥/审计）。
 
 ```mermaid
 flowchart LR
-    UI[Frontend] --> Login[Auth Login API]
+    UI[Frontend] --> Login[Auth APIs]
     Login --> AuthSvc[AuthService]
-    AuthSvc --> UserRepo[UserRepository]
-    AuthSvc --> KeyRepo[ApiKeyRepository]
-    AuthSvc --> SessionRepo[AuthSessionRepository]
+    AuthSvc --> IdentityRepo[User/Membership Repository]
+    AuthSvc --> SessionRepo[AuthSession Repository]
     AuthSvc --> JWT[TokenProvider]
 
     UI --> BizAPI[Business APIs]
     BizAPI --> Guard[get_current_user]
-    Guard --> JWT
-    Guard --> UserRepo
-    BizAPI --> BizSvc[PreReview/File/History Service]
-    BizSvc --> BizRepo[PreReviewRepository]
-    BizRepo --> DB[(PostgreSQL/SQLite)]
+    Guard --> Policy[Permission Policy Guard]
+    Policy --> IdentityRepo
 
-    AdminAPI[Admin APIs] --> AdminSvc[AdminService]
-    AdminSvc --> UserRepo
-    AdminSvc --> KeyRepo
-    AdminSvc --> AuditRepo[AuditLogRepository]
+    UI --> AdminAPI[Admin APIs]
+    AdminAPI --> AdminSvc[AdminMemberService]
+    AdminSvc --> IdentityRepo
+    AdminSvc --> FuncRepo[FunctionRole Repository]
+    AdminSvc --> KeyRepo[ApiKey Repository]
+    AdminSvc --> AuditRepo[Audit Repository]
 ```
 
 ### 3.2 关键链路
 
 1. 登录链路：
-- 用户输入 API Key。
-- 后端校验 `api_keys`（hash 比较、状态、过期、用户状态）。
-- 签发 `access_token + refresh_token`，记录 `auth_sessions`。
-2. 业务调用链路：
-- 前端带 `Authorization: Bearer <access_token>`。
-- `get_current_user` 解码 token，校验会话状态。
-- 注入 `CurrentUser` 给业务服务。
-3. 刷新链路：
-- 前端在 Access Token 过期时调用 refresh。
-- 服务端轮换 refresh token 并更新 `auth_sessions`。
-4. 管理链路：
-- 管理员通过后端 API 创建/禁用用户、签发/吊销 key。
-- 关键操作写入 `audit_logs`。
-
-### 3.3 认证与令牌传输澄清（v0.2.0）
-
-> Obsolete in v0.2.0: 旧版文档对 refresh token 传输方式存在“Cookie 与请求体并存”的歧义。
-
-本版本统一约束：
-
-1. `accessToken` 通过响应体返回，前端存内存并通过 `Authorization` 发送。
-2. `refreshToken` 仅通过 `Set-Cookie` 下发与轮换，不在 JSON 响应体明文返回。
-3. `POST /api/auth/refresh` 与 `POST /api/auth/logout` 默认不接收 `refreshToken` 请求体字段。
-4. 浏览器场景启用 CSRF 双提交策略：
-- Cookie：`csrf_token`（非 HttpOnly）。
-- Header：`X-CSRF-Token`，其值必须与 `csrf_token` 一致。
+- API Key 鉴权通过后，解析到 `user + membership`，签发 access/refresh token。
+2. 鉴权链路：
+- token 解码后以服务端 membership 为准，动态覆盖 token 中的旧 role。
+3. 管理链路：
+- 成员管理操作先过权限判定，再过“治理红线”判定，最后写审计。
+4. 职能链路：
+- 成员创建/更新必须绑定单一职能角色（可使用默认 `unassigned`）。
 
 ## 4. 数据与状态模型
 
-### 4.1 核心数据模型
+### 4.1 身份模型分层（v0.3.0）
 
-新增表：
+1. `UserAccount`（全局身份）
+- 语义：用户是谁（跨组织唯一）。
+- 建议字段：`id/email/display_name/account_status/created_at/disabled_at`。
+2. `OrgMembership`（组织内身份）
+- 语义：用户在某组织内是谁（权限、职能、成员状态）。
+- 建议字段：`id/user_id/org_id/permission_role/functional_role_id/member_status`。
+3. `OrgFunctionalRole`（组织职能角色）
+- 语义：组织内职能字典。
+- 建议字段：`id/org_id/code/name/description/is_active/sort_order`。
 
-1. `organizations`
-2. `users`
-3. `memberships`
-4. `api_keys`
-5. `auth_sessions`
-6. `audit_logs`
+> Obsolete in v0.3.0: 旧版将“用户状态 + 组织成员状态”混合表达，语义不清。
 
-改造既有表：
+### 4.2 状态模型（v0.3.0）
 
-1. `requests` 增加 `org_id`, `created_by_user_id`
-2. `sessions` 增加 `org_id`, `created_by_user_id`
-3. `uploaded_files` 增加 `org_id`, `created_by_user_id`
+1. 账号状态（`users.account_status`）：`ACTIVE | LOCKED | DELETED`
+2. 成员状态（`memberships.member_status`）：`INVITED | ACTIVE | SUSPENDED | REMOVED`
+3. API Key 状态：`ACTIVE | REVOKED | EXPIRED`
+4. Auth Session 状态：`ACTIVE | REVOKED | EXPIRED`
 
-### 4.2 状态模型
+### 4.3 权限角色与职能角色
 
-1. 用户状态：`ACTIVE | DISABLED | PENDING_INVITE`
-2. API Key 状态：`ACTIVE | REVOKED | EXPIRED`
-3. Auth Session 状态：`ACTIVE | REVOKED | EXPIRED`
-4. 角色：`OWNER | ADMIN | MEMBER | VIEWER`
+1. 权限角色（`permission_role`）决定可执行操作：`OWNER | ADMIN | MEMBER | VIEWER`
+2. 职能角色（`functional_role`）仅用于团队职能表达，不直接决定系统权限。
+3. 单成员单职能约束：一个 membership 只能绑定一个 `functional_role_id`。
 
-```mermaid
-stateDiagram-v2
-    [*] --> ACTIVE
-    ACTIVE --> REVOKED
-    ACTIVE --> EXPIRED
-    REVOKED --> [*]
-    EXPIRED --> [*]
-```
+### 4.4 权限边界（v0.3.0）
 
-### 4.3 状态模型澄清（v0.2.0）
+| 能力 | OWNER | ADMIN | MEMBER | VIEWER |
+|---|---|---|---|---|
+| 组织治理（owner 交接/关键安全策略） | ✅ | ❌ | ❌ | ❌ |
+| 管理 OWNER 成员 | ✅ | ❌ | ❌ | ❌ |
+| 管理 ADMIN/MEMBER/VIEWER | ✅ | ✅ | ❌ | ❌ |
+| 业务写（预审/再生成/上传） | ✅ | ✅ | ✅(本人数据) | ❌ |
+| 业务读（历史/详情） | ✅(组织全量) | ✅(组织全量) | ✅(本人数据) | ✅(组织只读) |
 
-> Obsolete in v0.2.0: 上述状态图将用户状态与 key/session 状态混用，语义不清。
+### 4.5 治理红线（v0.3.0）
 
-本版本拆分为三个状态机：
+1. 组织必须始终至少有一个 `ACTIVE OWNER`。
+2. `ADMIN` 不能修改任何 `OWNER` 的角色/状态。
+3. `OWNER` 不能直接把自己降为非 owner 或禁用自己（需先完成 owner 交接）。
+4. 禁用成员时，必须联动失效其 active sessions 与 active API keys。
+5. 所有拒绝类高风险操作也必须写入审计日志。
 
-1. 用户状态：`PENDING_INVITE -> ACTIVE -> DISABLED`。
-2. API Key 状态：`ACTIVE -> REVOKED`，或到期变为 `EXPIRED`。
-3. Auth Session 状态：`ACTIVE -> REVOKED`，或到期变为 `EXPIRED`。
+## 5. 接口演进策略
 
-```mermaid
-stateDiagram-v2
-    [*] --> PENDING_INVITE
-    PENDING_INVITE --> ACTIVE
-    ACTIVE --> DISABLED
-    DISABLED --> [*]
-```
+### 5.1 兼容原则
 
-### 4.4 数据访问策略（v0.2.0）
+1. 现有 `/api/admin/users/*` 在兼容窗口保留。
+2. 新语义优先：逐步迁移到 `/api/admin/members/*`。
+3. 字段演进采用“新增优先、保留旧字段”策略，避免破坏前端。
 
-1. 组织隔离：所有业务数据先按 `org_id` 过滤。
-2. 角色范围：
-- `OWNER/ADMIN`：可读写组织内全部数据。
-- `MEMBER`：仅可读写自己创建的数据（`created_by_user_id=self`）。
-- `VIEWER`：仅可读组织内数据，不可写操作。
-3. 业务接口权限：
-- `POST /api/prereview`、`POST /api/prereview/{session_id}/regenerate`、`POST /api/files/upload`：`OWNER/ADMIN/MEMBER`。
-- `GET /api/prereview/{session_id}`、`GET /api/prereview/history`：`OWNER/ADMIN/VIEWER` 组织级可见，`MEMBER` 仅本人数据。
+### 5.2 新增接口方向（规划）
 
-## 5. 阶段规划（Phase 1..N）
+1. `GET /api/admin/functional-roles`
+2. `POST /api/admin/functional-roles`
+3. `PATCH /api/admin/members/{member_id}/functional-role`
 
-### Phase 1：身份基础与业务接管
+## 6. 阶段规划（Phase 1..N）
+
+### Phase 1（已完成）
 
 1. 新增用户/组织/密钥/会话/审计表与迁移。
-2. 增加 `/api/auth/key-login`, `/api/auth/refresh`, `/api/auth/logout`, `/api/auth/me`。
-3. 业务接口接入 `get_current_user`。
-4. 业务数据写入 `org_id/created_by_user_id`。
-5. 前端完成登录页、token 管理、401 自动处理。
+2. 认证接口与业务鉴权接管。
 
-### Phase 2：团队治理能力
+### Phase 2（已完成）
 
-1. 新增管理员 API（用户开通、禁用、角色调整、密钥管理）。
-2. 历史与详情查询按角色执行数据隔离策略。
-3. 审计日志查询与导出接口。
-4. 前端补管理员最小可用页面（列表+关键操作）。
+1. 管理员 API（用户/密钥/审计）与最小管理页面。
 
-### Phase 3：安全与可扩展增强
+### Phase 3（在研）
 
-1. 邀请制注册与首次激活流程。
-2. 速率限制、异常登录告警、token 风险控制。
-3. 预留 OIDC 接口层，准备后续 SSO 对接。
+1. 安全增强（邀请、限流、会话安全）。
 
-## 6. 风险与回滚策略
+### Phase 4（v0.3.0 新增）
 
-### 6.1 主要风险
+1. 身份模型细化（全局身份 vs 组织内身份）。
+2. 权限红线治理规则落地（至少一个 owner、禁止危险自操作）。
+3. 职能角色模型与成员单职能约束落地。
+4. 管理 API 语义升级（users -> members，保留兼容层）。
 
-1. 鉴权切换期间，老接口可能出现兼容断档。
-2. 数据归属字段补齐后，历史旧数据权限归属可能不明确。
-3. 刷新会话逻辑引入后，token 失效边界处理复杂度上升。
+## 7. 风险与缓解
 
-### 6.2 缓解策略
+### 7.1 主要风险（新增）
 
-1. 设置短期兼容窗口：保留 `COPRODUCT_API_TOKEN` 的开发后门，仅限 `app_env=dev`。
-2. 做数据回填脚本，为历史数据写默认 `org_id/created_by_user_id`。
-3. 定义统一错误码（`AUTH_ERROR/TOKEN_EXPIRED/PERMISSION_DENIED`）并前后端一致处理。
-4. 对关键鉴权链路增加集成测试和回归清单。
+1. 风险：权限边界调整导致旧前端行为与后端策略冲突。
+- 缓解：后端返回明确错误码与可操作原因，前端按策略禁用按钮。
+2. 风险：模型迁移阶段出现 membership 与 functional role 不一致。
+- 缓解：迁移分步执行，先补默认 `unassigned` 职能后再加非空约束。
+3. 风险：治理红线引入后出现“无法执行管理操作”的运营阻塞。
+- 缓解：提供 owner 交接流程与 break-glass 操作手册（审计留痕）。
 
-### 6.3 回滚策略
+### 7.2 回滚策略
 
-1. 后端可通过 feature flag 退回“静态 token”模式（仅应急短时）。
-2. 新增表不影响原业务主键结构，可按路由开关灰度切换。
-3. 登录失败异常时，业务服务可快速切回本地调试 token（仅开发环境）。
+1. 接口层回滚：保留 `/api/admin/users/*` 兼容路径作为短期退路。
+2. 数据层回滚：不回滚核心身份字段，仅允许脚本修复脏数据。
+3. 策略层回滚：红线策略可配置降级，但降级必须记录审计事件。

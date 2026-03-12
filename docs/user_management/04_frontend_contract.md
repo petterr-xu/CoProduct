@@ -1,9 +1,9 @@
 # 前端契约文档 - user_management
-> Version: v0.2.0
+> Version: v0.3.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
-> Contract Priority (v0.2.0): 若旧段落与 `Obsolete in v0.2.0` 后的新规则冲突，以新规则为准。
+> Contract Priority (v0.3.0): 若旧段落与 `v0.3.0` 新增规则冲突，以 `v0.3.0` 为准；`v0.2.0` 作为兼容基线保留。
 
 ## 1. 请求模型（前端视角）
 
@@ -120,6 +120,73 @@ type ListApiKeysQuery = {
 
 - 无请求体。
 
+> v0.3.0 补充（对已有接口的增量约束）：
+1. `POST /api/admin/users` 中 `orgId` 不传时，后端默认使用当前登录用户所属组织。
+2. `PATCH /api/admin/users/{user_id}/status|role` 进入治理红线校验（如“至少一个 owner”）。
+3. 前端在兼容窗口中保留对 `/api/admin/users/*` 的消费能力。
+
+### 1.2A 管理接口请求（Phase 4 新增）
+
+1. `GET /api/admin/members`
+
+```ts
+type ListMembersQuery = {
+  query?: string;
+  permissionRole?: Role;
+  memberStatus?: MemberStatus;
+  functionalRoleId?: string;
+  page?: number;
+  pageSize?: number;
+};
+```
+
+2. `PATCH /api/admin/members/{member_id}/role`
+
+```ts
+type UpdateMemberRoleRequest = {
+  role: Role;
+  reason?: string;
+};
+```
+
+3. `PATCH /api/admin/members/{member_id}/status`
+
+```ts
+type UpdateMemberStatusRequest = {
+  status: MemberStatus;
+  reason?: string;
+};
+```
+
+4. `PATCH /api/admin/members/{member_id}/functional-role`
+
+```ts
+type UpdateMemberFunctionalRoleRequest = {
+  functionalRoleId: string;
+  reason?: string;
+};
+```
+
+5. `GET /api/admin/functional-roles`
+
+```ts
+type ListFunctionalRolesQuery = {
+  isActive?: boolean;
+  page?: number;
+  pageSize?: number;
+};
+```
+
+6. `POST /api/admin/functional-roles`
+
+```ts
+type CreateFunctionalRoleRequest = {
+  code: string;
+  name: string;
+  description?: string;
+};
+```
+
 ### 1.3 请求头与 Cookie 约定（v0.2.0）
 
 1. 业务与管理接口：
@@ -223,6 +290,40 @@ type OperationSuccessResponse = {
 };
 ```
 
+### 2.4 管理响应（Phase 4 新增）
+
+```ts
+type FunctionalRoleView = {
+  id: string;
+  orgId: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type MemberListItem = {
+  membershipId: string;
+  userId: string;
+  email: string;
+  displayName: string;
+  permissionRole: Role;
+  memberStatus: MemberStatus;
+  functionalRoleId: string;
+  functionalRoleCode: string;
+  functionalRoleName: string;
+  orgId: string;
+  createdAt: string;
+  lastLoginAt: string | null;
+};
+
+type ListMembersResponse = ListResponse<MemberListItem>;
+type ListFunctionalRolesResponse = ListResponse<FunctionalRoleView>;
+```
+
 ### 2.3 既有业务接口影响
 
 1. `prereview/history/files` 的请求与响应主体不改。
@@ -239,6 +340,13 @@ type UserStatus = 'ACTIVE' | 'DISABLED' | 'PENDING_INVITE';
 type ApiKeyStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED';
 ```
 
+### 3.1A 枚举扩展（v0.3.0）
+
+```ts
+type AccountStatus = 'ACTIVE' | 'LOCKED' | 'DELETED';
+type MemberStatus = 'INVITED' | 'ACTIVE' | 'SUSPENDED' | 'REMOVED';
+```
+
 ### 3.2 UI 映射
 
 1. `Role`：用于权限门禁（按钮可见性与路由可访问性）。
@@ -250,6 +358,12 @@ type ApiKeyStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED';
 1. `OWNER/ADMIN`：历史与详情可见组织内全部数据。
 2. `MEMBER`：历史与详情仅可见本人创建数据。
 3. `VIEWER`：仅可读，不可触发创建/再生成/上传。
+
+### 3.4 权限边界补充（v0.3.0）
+
+1. `OWNER` 可管理 owner 与组织治理策略。
+2. `ADMIN` 仅可管理非 owner 成员，不能调整 owner 角色/状态。
+3. 职能角色（如产品经理/运营）不直接决定系统权限，仅用于协作语义。
 
 ## 4. 错误码到 UI 行为映射
 
@@ -264,6 +378,10 @@ type ApiKeyStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED';
 | `VALIDATION_ERROR` | 400/422 | 表单字段级错误提示 |
 | `RESOURCE_NOT_FOUND` | 404 | 提示资源不存在并回退列表页 |
 | `PERSISTENCE_ERROR` | 500 | 展示系统错误并允许重试 |
+| `LAST_OWNER_PROTECTED` | 409 | 提示“组织至少保留一个可用 owner” |
+| `SELF_OPERATION_FORBIDDEN` | 403 | 提示“不允许对当前账号执行该敏感操作” |
+| `OWNER_GUARD_VIOLATION` | 403 | 提示“当前角色不可操作 owner 成员” |
+| `FUNCTION_ROLE_MISMATCH` | 422 | 提示“职能角色与组织不匹配” |
 
 ## 5. 与后端契约对齐说明
 
@@ -271,3 +389,4 @@ type ApiKeyStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED';
 2. 枚举值大小写必须完全一致：`OWNER/ADMIN/MEMBER/VIEWER` 等。
 3. token 响应字段命名采用驼峰（后端同步返回驼峰字段）。
 4. 前端对新增字段默认“向后兼容”：未知字段忽略，缺失字段采用安全默认。
+5. 兼容窗口内同时支持 `/api/admin/users/*`（旧）与 `/api/admin/members/*`（新）契约。

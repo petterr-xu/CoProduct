@@ -1,5 +1,5 @@
 # 后端检查清单 - user_management
-> Version: v0.2.1
+> Version: v0.3.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
@@ -23,6 +23,15 @@
 3. 审计日志可查询关键操作记录。
 4. 用户/API Key 列表接口返回统一分页结构（`items/total/page/pageSize`）。
 
+### 1.3 Phase 4 功能（v0.3.0 新增）
+
+1. `OWNER` 与 `ADMIN` 权限边界按新矩阵生效（admin 不能操作 owner）。
+2. 任意成员变更后，组织内 `ACTIVE OWNER` 数量始终 >= 1。
+3. 自降权/自禁用等危险自操作被稳定拒绝并返回明确错误码。
+4. 成员模型支持 `functional_role_id` 且保证单成员单职能绑定。
+5. 新增职能角色接口（查询/创建/启停用）可用。
+6. 成员禁用后，关联 API key 与会话联动失效符合策略。
+
 ## 2. 契约对齐检查
 
 1. `05_backend_contract.md` 中路由、方法、字段与实现一致。
@@ -30,6 +39,8 @@
 3. 错误体结构统一：`detail.error_code + message`。
 4. 枚举值与文档一致，无隐式别名。
 5. 端点级权限矩阵与文档一致（含 `MEMBER` 本人数据限制）。
+6. 成员语义接口（`/api/admin/members/*`）与兼容接口（`/api/admin/users/*`）行为一致。
+7. 职能角色字段语义与约束（单值绑定）与契约一致。
 
 ## 3. 持久化与流程检查
 
@@ -50,3 +61,4 @@
 5. 登录接口限流配置在 Phase 3 可启用并可观测。
 6. refresh token 重放会被拦截并产生审计/指标记录。
 7. 灰度期 `auth_legacy_fallback_total` 指标可用且可下钻排查。
+8. 治理拒绝类错误（`LAST_OWNER_PROTECTED` 等）具备稳定状态码与审计记录。

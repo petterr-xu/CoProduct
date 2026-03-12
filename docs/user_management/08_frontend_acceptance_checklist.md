@@ -1,5 +1,5 @@
 # 前端检查清单 - user_management
-> Version: v0.2.0
+> Version: v0.3.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
@@ -23,6 +23,15 @@
 5. API Key 吊销后页面状态及时更新。
 6. 用户/API Key 列表均使用统一分页字段（`items/total/page/pageSize`）。
 
+### 1.3 Phase 4 功能（v0.3.0 新增）
+
+1. 管理页可区分展示“权限角色”与“职能角色”。
+2. 成员仅可绑定一个职能角色，UI 不允许多选。
+3. `OWNER/ADMIN` 显示为中文可读标签，不再裸展示枚举值。
+4. 对高风险操作（自降权/自禁用/操作 owner）按钮禁用并有明确原因提示。
+5. 职能角色管理页可完成基础维护（查看/新增/启停用）。
+6. 成员列表支持按职能角色筛选。
+
 ## 2. 契约对齐检查
 
 1. `04_frontend_contract.md` 中请求/响应类型与实际调用一致。
@@ -30,6 +39,8 @@
 3. 枚举值大小写完全一致（`OWNER/ADMIN/MEMBER/VIEWER`）。
 4. 业务接口统一使用 `Authorization: Bearer <accessToken>`。
 5. `POST /api/auth/refresh` 与 `POST /api/auth/logout` 契约采用 Cookie 方案且实现一致。
+6. 成员接口路径演进（`users` -> `members`）在兼容期可双栈运行且前端封装一致。
+7. 职能角色字段（`functionalRoleId/name/code`）与后端契约一致。
 
 ## 3. 状态/异常/空态检查
 
@@ -47,3 +58,4 @@
 2. 前端已移除静态 `NEXT_PUBLIC_API_TOKEN` 依赖。
 3. 旧功能页面不存在死循环重定向或重复请求风暴。
 4. 在不同角色账号下，按钮与页面可见性符合权限设计。
+5. 权限红线相关失败场景展示正确文案，不出现静默失败。

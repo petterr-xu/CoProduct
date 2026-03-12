@@ -1,5 +1,5 @@
 # 后端任务拆解文档 - user_management
-> Version: v0.2.1
+> Version: v0.3.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
@@ -70,6 +70,35 @@
 3. BE-3.3 会话安全增强（异常登录检测、批量下线）。
 4. BE-3.4 OIDC 抽象层（接口预留）。
 
+## 3A. Phase 4 任务（v0.3.0 新增）
+
+目标：细化身份域建模、明确 OWNER/ADMIN 边界、落地治理红线与职能角色。
+
+1. BE-4.1 身份模型分层重构
+- 明确全局身份（`users`）与组织成员身份（`memberships`）职责边界。
+- 新增或重构状态字段：`account_status` 与 `member_status`。
+2. BE-4.2 职能角色数据模型
+- 新增 `org_function_roles` 表。
+- `memberships` 新增 `functional_role_id`，约束单成员单职能。
+3. BE-4.3 权限边界差异化
+- 落地 OWNER/ADMIN 的差异规则（admin 不可操作 owner）。
+- 服务层集中封装权限判断，禁止路由层分散实现。
+4. BE-4.4 治理红线约束
+- 至少一个 active owner 约束。
+- 禁止危险自操作（自降权/自禁用）。
+- 禁用成员联动失效 sessions 与 API keys。
+5. BE-4.5 成员语义 API 演进
+- 新增 `/api/admin/members/*` 与 `/api/admin/functional-roles/*`。
+- 保留 `/api/admin/users/*` 兼容层并提供迁移计划。
+6. BE-4.6 审计与错误码增强
+- 高风险拒绝操作必须写 `FAILED` 审计并带 `reason`。
+- 新增治理类错误码（如 `LAST_OWNER_PROTECTED`）。
+7. BE-4.7 迁移与回填
+- 为组织初始化默认职能 `unassigned` 并回填历史 membership。
+- 输出一致性校验 SQL 与回滚脚本。
+8. BE-4.8 测试补齐
+- owner 红线测试、admin 操作 owner 拒绝测试、职能跨组织绑定测试。
+
 ## 4. 依赖与执行顺序
 
 ### 4.1 依赖
@@ -79,12 +108,14 @@
 3. BE-1.5 依赖 BE-1.4。
 4. BE-2.x 依赖 Phase 1 全部稳定并完成前端联调。
 5. BE-1.10（重放防护）依赖 BE-1.3（认证服务）与 BE-1.1（auth_sessions schema）。
+6. BE-4.x 依赖 BE-2.x 管理能力稳定后开展。
 
 ### 4.2 推荐顺序
 
 1. 先 schema 与迁移，再做认证服务。
 2. 认证稳定后再切业务鉴权，避免主链路中断。
 3. 管理员接口放 Phase 2，避免阻塞上线。
+4. Phase 4 先做 schema 与策略，再做接口演进与兼容层。
 
 ## 5. 风险与缓解
 
@@ -96,3 +127,5 @@
 - 缓解：集中封装 `permission_guard`，禁止路由层手写条件。
 4. 风险：保留旧 token 兼容窗口带来安全风险。
 - 缓解：仅 dev 环境允许，生产禁用并做启动检查。
+5. 风险：身份模型改造引入数据迁移不一致。
+- 缓解：三步迁移（加字段->回填->加约束）并附一致性校验。

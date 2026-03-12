@@ -1,9 +1,9 @@
 # 后端契约文档 - user_management
-> Version: v0.2.0
+> Version: v0.3.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
-> Contract Priority (v0.2.0): 若旧段落与 `Obsolete in v0.2.0` 后的新规则冲突，以新规则为准。
+> Contract Priority (v0.3.0): 保留 `v0.2.0` 既有接口契约作为兼容基线；`v0.3.0` 新增段落定义演进后规则。
 
 ## 1. API 列表（Method + Path）
 
@@ -23,6 +23,30 @@
 5. `POST /api/admin/api-keys`
 6. `GET /api/admin/api-keys`
 7. `POST /api/admin/api-keys/{key_id}/revoke`
+
+### 1.2A 管理域（v0.3.0 对已有接口的补充约束）
+
+对以下已有接口补充治理规则，不删除既有契约：
+
+1. `POST /api/admin/users`
+2. `PATCH /api/admin/users/{user_id}/status`
+3. `PATCH /api/admin/users/{user_id}/role`
+
+补充规则：
+
+1. `orgId` 省略时，默认使用当前登录成员所属组织。
+2. 角色/状态变更必须满足“至少一个 active owner”约束。
+3. `ADMIN` 不允许操作 `OWNER` 目标成员。
+4. 禁止危险自操作（自降权/自禁用）并返回明确错误码。
+
+### 1.2B 管理域（Phase 4 新增）
+
+1. `GET /api/admin/members`
+2. `PATCH /api/admin/members/{member_id}/role`
+3. `PATCH /api/admin/members/{member_id}/status`
+4. `PATCH /api/admin/members/{member_id}/functional-role`
+5. `GET /api/admin/functional-roles`
+6. `POST /api/admin/functional-roles`
 
 ### 1.3 既有业务域（接入新鉴权）
 
@@ -137,6 +161,39 @@ v0.2.0 生效规则：
 - Query: `userId?: string`, `status?: ApiKeyStatus`, `page?: number=1`, `pageSize?: number=20(max 100)`。
 7. `POST /api/admin/api-keys/{key_id}/revoke`
 - 请求体：空对象 `{}`。
+
+### 2.6 管理接口请求细化（v0.3.0 新增）
+
+1. `GET /api/admin/members`
+- Query: `query?: string`, `permissionRole?: Role`, `memberStatus?: MemberStatus`, `functionalRoleId?: string`, `page?: number=1`, `pageSize?: number=20(max 100)`。
+
+2. `PATCH /api/admin/members/{member_id}/role`
+
+```json
+{ "role": "ADMIN", "reason": "owner handover completed" }
+```
+
+3. `PATCH /api/admin/members/{member_id}/status`
+
+```json
+{ "status": "SUSPENDED", "reason": "security review" }
+```
+
+4. `PATCH /api/admin/members/{member_id}/functional-role`
+
+```json
+{ "functionalRoleId": "frl_xxx", "reason": "team reassignment" }
+```
+
+5. `POST /api/admin/functional-roles`
+
+```json
+{
+  "code": "pm",
+  "name": "产品经理",
+  "description": "负责需求设计与协同"
+}
+```
 
 ## 3. 响应结构与字段语义
 
@@ -285,6 +342,57 @@ v0.2.0 登录响应：
 }
 ```
 
+### 3.6 管理接口关键响应（v0.3.0 新增）
+
+`GET /api/admin/members` 响应：
+
+```json
+{
+  "items": [
+    {
+      "membershipId": "mem_xxx",
+      "userId": "usr_xxx",
+      "email": "member@coproduct.dev",
+      "displayName": "Member A",
+      "permissionRole": "MEMBER",
+      "memberStatus": "ACTIVE",
+      "functionalRoleId": "frl_xxx",
+      "functionalRoleCode": "pm",
+      "functionalRoleName": "产品经理",
+      "orgId": "org_default",
+      "createdAt": "2026-03-12T01:00:00Z",
+      "lastLoginAt": "2026-03-12T02:00:00Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 20
+}
+```
+
+`GET /api/admin/functional-roles` 响应：
+
+```json
+{
+  "items": [
+    {
+      "id": "frl_xxx",
+      "orgId": "org_default",
+      "code": "pm",
+      "name": "产品经理",
+      "description": "负责需求设计与协同",
+      "isActive": true,
+      "sortOrder": 10,
+      "createdAt": "2026-03-12T01:00:00Z",
+      "updatedAt": "2026-03-12T01:00:00Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 20
+}
+```
+
 ## 4. 状态/错误码规则
 
 ### 4.1 HTTP 状态码
@@ -309,6 +417,10 @@ v0.2.0 登录响应：
 7. `VALIDATION_ERROR`
 8. `PERSISTENCE_ERROR`
 9. `RESOURCE_NOT_FOUND`
+10. `LAST_OWNER_PROTECTED`
+11. `SELF_OPERATION_FORBIDDEN`
+12. `OWNER_GUARD_VIOLATION`
+13. `FUNCTION_ROLE_MISMATCH`
 
 统一错误体：
 
@@ -338,9 +450,26 @@ v0.2.0 登录响应：
 2. `MEMBER` 仅能访问 `createdByUserId == self` 的业务数据。
 3. `VIEWER` 只读，禁止所有写接口。
 
+### 4.4 权限矩阵补充（v0.3.0）
+
+| 接口 | OWNER | ADMIN | MEMBER | VIEWER |
+|---|---|---|---|---|
+| `GET /api/admin/members` | ✅ | ✅ | ❌ | ❌ |
+| `PATCH /api/admin/members/{id}/role` | ✅ | ✅(非 owner) | ❌ | ❌ |
+| `PATCH /api/admin/members/{id}/status` | ✅ | ✅(非 owner) | ❌ | ❌ |
+| `PATCH /api/admin/members/{id}/functional-role` | ✅ | ✅(非 owner) | ❌ | ❌ |
+| `GET/POST /api/admin/functional-roles` | ✅ | ✅ | ❌ | ❌ |
+
+治理红线约束：
+
+1. 组织必须始终保留至少一个 `ACTIVE OWNER`。
+2. `ADMIN` 不能修改 `OWNER` 成员。
+3. 禁止危险自操作（自降权/自禁用）。
+
 ## 5. 与前端契约对齐说明
 
 1. 与 `04_frontend_contract.md` 路径、字段名、枚举值逐项对齐。
 2. 响应字段统一驼峰命名（camelCase），避免前端二次映射成本。
 3. 保留既有业务接口 body，不做破坏性改动，仅升级鉴权机制。
 4. 新增业务字段（`orgId/createdByUserId`）应为可选，避免旧前端解析失败。
+5. 管理接口演进遵循“旧接口保留 + 新接口追加”策略，兼容期允许双路由并存。
