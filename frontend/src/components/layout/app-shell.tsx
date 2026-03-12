@@ -22,10 +22,8 @@ type NavItem = {
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, clearSession } = useAuthStore((state) => ({
-    user: state.user,
-    clearSession: state.clearSession
-  }));
+  const user = useAuthStore((state) => state.user);
+  const clearSession = useAuthStore((state) => state.clearSession);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const isLoginRoute = pathname === '/login';
