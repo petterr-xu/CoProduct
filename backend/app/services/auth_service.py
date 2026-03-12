@@ -62,6 +62,20 @@ class AuthRefreshResult:
     expires_in: int
 
 
+@dataclass(frozen=True)
+class AuthContextOrg:
+    org_id: str
+    org_name: str
+
+
+@dataclass(frozen=True)
+class AuthContextResult:
+    user: CurrentUserContext
+    active_org: AuthContextOrg | None
+    available_orgs: list[AuthContextOrg]
+    scope_mode: str
+
+
 class AuthService:
     """Authentication service for key login, refresh, logout, and context resolution."""
 
@@ -367,6 +381,26 @@ class AuthService:
             # membership changed after token issued; keep server-side role as source of truth
             pass
         return self._to_user_context(user=user, membership=membership, session_id=session_id)
+
+    def get_auth_context(self, *, current_user: CurrentUserContext) -> AuthContextResult:
+        available_orgs = [
+            AuthContextOrg(org_id=item.id, org_name=item.name)
+            for item in self.repo.list_active_organizations_by_user(user_id=current_user.user_id)
+        ]
+
+        # Legacy/hybrid user may not have membership rows; keep a best-effort org context.
+        if not available_orgs and current_user.org_id:
+            fallback = self.repo.get_organization(current_user.org_id)
+            if fallback is not None:
+                available_orgs = [AuthContextOrg(org_id=fallback.id, org_name=fallback.name)]
+
+        active_org = next((item for item in available_orgs if item.org_id == current_user.org_id), None)
+        return AuthContextResult(
+            user=current_user,
+            active_org=active_org,
+            available_orgs=available_orgs,
+            scope_mode="ORG_SCOPED",
+        )
 
     def _issue_access_token(self, *, user: UserModel, membership: MembershipModel, session_id: str) -> str:
         return issue_jwt_token(

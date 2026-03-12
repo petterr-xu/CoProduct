@@ -75,7 +75,7 @@ class AdminUserService:
         metadata: dict | None = None,
     ) -> None:
         self.repo.create_audit_log(
-            org_id=current_user.org_id,
+            org_id=current_user.org_id or None,
             actor_user_id=current_user.user_id,
             target_type=target_type,
             target_id=target_id,
@@ -88,6 +88,29 @@ class AdminUserService:
             },
         )
         self._raise(error_code=error_code, message=message, http_status=http_status)
+
+    def _require_active_org_context(
+        self,
+        *,
+        current_user: CurrentUserContext,
+        action: str,
+        target_type: str,
+        target_id: str | None = None,
+    ) -> str:
+        org_id = (current_user.org_id or "").strip()
+        if org_id:
+            return org_id
+
+        self._raise_with_audit(
+            current_user=current_user,
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
+            error_code="NO_ACTIVE_ORG",
+            message="Current user has no active organization context",
+            http_status=status.HTTP_403_FORBIDDEN,
+        )
+        return ""
 
     def _ensure_can_manage_target_membership(
         self,
@@ -244,9 +267,19 @@ class AdminUserService:
         role: str,
         org_id: str | None,
     ) -> dict:
-        target_org_id = org_id or current_user.org_id
-        if target_org_id != current_user.org_id:
-            self._raise(
+        action = "ADMIN_CREATE_USER"
+        active_org_id = self._require_active_org_context(
+            current_user=current_user,
+            action=action,
+            target_type="user",
+        )
+        target_org_id = org_id or active_org_id
+        if target_org_id != active_org_id:
+            self._raise_with_audit(
+                current_user=current_user,
+                action=action,
+                target_type="organization",
+                target_id=target_org_id,
                 error_code="PERMISSION_DENIED",
                 message="Cannot create users in another organization",
                 http_status=status.HTTP_403_FORBIDDEN,
@@ -260,7 +293,7 @@ class AdminUserService:
         if current_user.role == "ADMIN" and role == "OWNER":
             self._raise_with_audit(
                 current_user=current_user,
-                action="ADMIN_CREATE_USER",
+                action=action,
                 target_type="user",
                 target_id=None,
                 error_code="OWNER_GUARD_VIOLATION",
@@ -290,11 +323,11 @@ class AdminUserService:
 
         membership = self.repo.create_membership(user_id=user.id, org_id=target_org_id, role=role, status="ACTIVE")
         self.repo.create_audit_log(
-            org_id=current_user.org_id,
+            org_id=active_org_id,
             actor_user_id=current_user.user_id,
             target_type="user",
             target_id=user.id,
-            action="ADMIN_CREATE_USER",
+            action=action,
             result="SUCCESS",
             metadata={"role": role, "email": normalized_email},
         )
@@ -308,6 +341,12 @@ class AdminUserService:
         next_status: str,
     ) -> dict:
         action = "ADMIN_UPDATE_USER_STATUS"
+        active_org_id = self._require_active_org_context(
+            current_user=current_user,
+            action=action,
+            target_type="user",
+            target_id=user_id,
+        )
         if next_status not in VALID_USER_STATUS:
             self._raise(
                 error_code="VALIDATION_ERROR",
@@ -315,7 +354,7 @@ class AdminUserService:
                 http_status=status.HTTP_422_UNPROCESSABLE_CONTENT,
             )
 
-        membership = self.repo.get_membership(user_id=user_id, org_id=current_user.org_id)
+        membership = self.repo.get_membership(user_id=user_id, org_id=active_org_id)
         if membership is None:
             self._raise(
                 error_code="RESOURCE_NOT_FOUND",
@@ -353,11 +392,11 @@ class AdminUserService:
         revoked_sessions = 0
         revoked_keys = 0
         if next_status == "DISABLED":
-            revoked_sessions = self.repo.revoke_all_user_sessions(user_id=user_id, org_id=current_user.org_id)
-            revoked_keys = self.repo.revoke_active_api_keys_by_user(user_id=user_id, org_id=current_user.org_id)
+            revoked_sessions = self.repo.revoke_all_user_sessions(user_id=user_id, org_id=active_org_id)
+            revoked_keys = self.repo.revoke_active_api_keys_by_user(user_id=user_id, org_id=active_org_id)
 
         self.repo.create_audit_log(
-            org_id=current_user.org_id,
+            org_id=active_org_id,
             actor_user_id=current_user.user_id,
             target_type="user",
             target_id=user_id,
@@ -379,6 +418,12 @@ class AdminUserService:
         role: str,
     ) -> dict:
         action = "ADMIN_UPDATE_USER_ROLE"
+        active_org_id = self._require_active_org_context(
+            current_user=current_user,
+            action=action,
+            target_type="user",
+            target_id=user_id,
+        )
         if role not in VALID_ROLES:
             self._raise(
                 error_code="VALIDATION_ERROR",
@@ -386,7 +431,7 @@ class AdminUserService:
                 http_status=status.HTTP_422_UNPROCESSABLE_CONTENT,
             )
 
-        membership = self.repo.get_membership(user_id=user_id, org_id=current_user.org_id)
+        membership = self.repo.get_membership(user_id=user_id, org_id=active_org_id)
         if membership is None:
             self._raise(
                 error_code="RESOURCE_NOT_FOUND",
@@ -430,7 +475,7 @@ class AdminUserService:
             next_role=role,
         )
 
-        updated = self.repo.update_membership_role(user_id=user_id, org_id=current_user.org_id, role=role)
+        updated = self.repo.update_membership_role(user_id=user_id, org_id=active_org_id, role=role)
         if updated is None:
             self._raise(
                 error_code="RESOURCE_NOT_FOUND",
@@ -439,7 +484,7 @@ class AdminUserService:
             )
 
         self.repo.create_audit_log(
-            org_id=current_user.org_id,
+            org_id=active_org_id,
             actor_user_id=current_user.user_id,
             target_type="user",
             target_id=user_id,
@@ -458,6 +503,12 @@ class AdminUserService:
         expires_at: datetime | None,
     ) -> IssueApiKeyResult:
         action = "ADMIN_ISSUE_API_KEY"
+        active_org_id = self._require_active_org_context(
+            current_user=current_user,
+            action=action,
+            target_type="api_key",
+            target_id=user_id,
+        )
         if not name.strip():
             self._raise(
                 error_code="VALIDATION_ERROR",
@@ -465,7 +516,7 @@ class AdminUserService:
                 http_status=status.HTTP_422_UNPROCESSABLE_CONTENT,
             )
 
-        membership = self.repo.get_membership(user_id=user_id, org_id=current_user.org_id)
+        membership = self.repo.get_membership(user_id=user_id, org_id=active_org_id)
         if membership is None:
             self._raise(
                 error_code="RESOURCE_NOT_FOUND",
@@ -493,7 +544,7 @@ class AdminUserService:
 
         key = self.repo.create_api_key(
             user_id=user_id,
-            org_id=current_user.org_id,
+            org_id=active_org_id,
             name=name.strip(),
             key_prefix=key_prefix,
             key_hash=key_hash,
@@ -501,7 +552,7 @@ class AdminUserService:
             expires_at=expires_at,
         )
         self.repo.create_audit_log(
-            org_id=current_user.org_id,
+            org_id=active_org_id,
             actor_user_id=current_user.user_id,
             target_type="api_key",
             target_id=key.id,
@@ -543,14 +594,20 @@ class AdminUserService:
 
     def revoke_api_key(self, *, current_user: CurrentUserContext, key_id: str) -> dict:
         action = "ADMIN_REVOKE_API_KEY"
+        active_org_id = self._require_active_org_context(
+            current_user=current_user,
+            action=action,
+            target_type="api_key",
+            target_id=key_id,
+        )
         api_key = self.repo.get_api_key(key_id)
-        if api_key is None or api_key.org_id != current_user.org_id:
+        if api_key is None or api_key.org_id != active_org_id:
             self._raise(
                 error_code="RESOURCE_NOT_FOUND",
                 message="API key not found",
                 http_status=status.HTTP_404_NOT_FOUND,
             )
-        membership = self.repo.get_membership(user_id=api_key.user_id, org_id=current_user.org_id)
+        membership = self.repo.get_membership(user_id=api_key.user_id, org_id=active_org_id)
         if membership is None:
             self._raise(
                 error_code="RESOURCE_NOT_FOUND",
@@ -574,9 +631,9 @@ class AdminUserService:
                 http_status=status.HTTP_403_FORBIDDEN,
             )
 
-        _, revoked_sessions = self.repo.revoke_api_key_and_sessions(key_id=key_id, org_id=current_user.org_id)
+        _, revoked_sessions = self.repo.revoke_api_key_and_sessions(key_id=key_id, org_id=active_org_id)
         self.repo.create_audit_log(
-            org_id=current_user.org_id,
+            org_id=active_org_id,
             actor_user_id=current_user.user_id,
             target_type="api_key",
             target_id=key_id,
@@ -648,6 +705,12 @@ class AdminUserService:
         reason: str | None,
     ) -> dict:
         action = "ADMIN_UPDATE_MEMBER_ROLE"
+        active_org_id = self._require_active_org_context(
+            current_user=current_user,
+            action=action,
+            target_type="membership",
+            target_id=membership_id,
+        )
         if role not in VALID_ROLES:
             self._raise(
                 error_code="VALIDATION_ERROR",
@@ -656,7 +719,7 @@ class AdminUserService:
             )
 
         membership = self.repo.get_membership_by_id(membership_id)
-        if membership is None or membership.org_id != current_user.org_id:
+        if membership is None or membership.org_id != active_org_id:
             self._raise(
                 error_code="RESOURCE_NOT_FOUND",
                 message="Membership not found",
@@ -716,7 +779,7 @@ class AdminUserService:
             )
 
         self.repo.create_audit_log(
-            org_id=current_user.org_id,
+            org_id=active_org_id,
             actor_user_id=current_user.user_id,
             target_type="membership",
             target_id=membership_id,
@@ -735,6 +798,12 @@ class AdminUserService:
         reason: str | None,
     ) -> dict:
         action = "ADMIN_UPDATE_MEMBER_STATUS"
+        active_org_id = self._require_active_org_context(
+            current_user=current_user,
+            action=action,
+            target_type="membership",
+            target_id=membership_id,
+        )
         if member_status not in VALID_MEMBER_STATUS:
             self._raise(
                 error_code="VALIDATION_ERROR",
@@ -743,7 +812,7 @@ class AdminUserService:
             )
 
         membership = self.repo.get_membership_by_id(membership_id)
-        if membership is None or membership.org_id != current_user.org_id:
+        if membership is None or membership.org_id != active_org_id:
             self._raise(
                 error_code="RESOURCE_NOT_FOUND",
                 message="Membership not found",
@@ -785,7 +854,7 @@ class AdminUserService:
             revoked_keys = self.repo.revoke_active_api_keys_by_user(user_id=membership.user_id, org_id=membership.org_id)
 
         self.repo.create_audit_log(
-            org_id=current_user.org_id,
+            org_id=active_org_id,
             actor_user_id=current_user.user_id,
             target_type="membership",
             target_id=membership_id,
@@ -818,8 +887,14 @@ class AdminUserService:
         reason: str | None,
     ) -> dict:
         action = "ADMIN_UPDATE_MEMBER_FUNCTION_ROLE"
+        active_org_id = self._require_active_org_context(
+            current_user=current_user,
+            action=action,
+            target_type="membership",
+            target_id=membership_id,
+        )
         membership = self.repo.get_membership_by_id(membership_id)
-        if membership is None or membership.org_id != current_user.org_id:
+        if membership is None or membership.org_id != active_org_id:
             self._raise(
                 error_code="RESOURCE_NOT_FOUND",
                 message="Membership not found",
@@ -833,7 +908,7 @@ class AdminUserService:
         )
 
         function_role = self.repo.get_functional_role(functional_role_id)
-        if function_role is None or function_role.org_id != current_user.org_id:
+        if function_role is None or function_role.org_id != active_org_id:
             self._raise_with_audit(
                 current_user=current_user,
                 action=action,
@@ -862,7 +937,7 @@ class AdminUserService:
                 http_status=status.HTTP_404_NOT_FOUND,
             )
         self.repo.create_audit_log(
-            org_id=current_user.org_id,
+            org_id=active_org_id,
             actor_user_id=current_user.user_id,
             target_type="membership",
             target_id=membership_id,
@@ -907,6 +982,12 @@ class AdminUserService:
         name: str,
         description: str | None,
     ) -> dict:
+        action = "ADMIN_CREATE_FUNCTION_ROLE"
+        active_org_id = self._require_active_org_context(
+            current_user=current_user,
+            action=action,
+            target_type="functional_role",
+        )
         normalized_code = code.strip().lower()
         if not FUNCTION_ROLE_CODE_PATTERN.match(normalized_code):
             self._raise(
@@ -921,7 +1002,7 @@ class AdminUserService:
                 message="Functional role name is required",
                 http_status=status.HTTP_422_UNPROCESSABLE_CONTENT,
             )
-        existing = self.repo.find_functional_role_by_code(org_id=current_user.org_id, code=normalized_code)
+        existing = self.repo.find_functional_role_by_code(org_id=active_org_id, code=normalized_code)
         if existing is not None:
             self._raise(
                 error_code="VALIDATION_ERROR",
@@ -930,18 +1011,18 @@ class AdminUserService:
             )
 
         item = self.repo.create_functional_role(
-            org_id=current_user.org_id,
+            org_id=active_org_id,
             code=normalized_code,
             name=normalized_name,
             description=description.strip() if description else None,
             sort_order=100,
         )
         self.repo.create_audit_log(
-            org_id=current_user.org_id,
+            org_id=active_org_id,
             actor_user_id=current_user.user_id,
             target_type="functional_role",
             target_id=item.id,
-            action="ADMIN_CREATE_FUNCTION_ROLE",
+            action=action,
             result="SUCCESS",
             metadata={"code": item.code, "name": item.name},
         )
@@ -964,8 +1045,15 @@ class AdminUserService:
         role_id: str,
         is_active: bool,
     ) -> dict:
+        action = "ADMIN_UPDATE_FUNCTION_ROLE_STATUS"
+        active_org_id = self._require_active_org_context(
+            current_user=current_user,
+            action=action,
+            target_type="functional_role",
+            target_id=role_id,
+        )
         item = self.repo.get_functional_role(role_id)
-        if item is None or item.org_id != current_user.org_id:
+        if item is None or item.org_id != active_org_id:
             self._raise(
                 error_code="RESOURCE_NOT_FOUND",
                 message="Functional role not found",
@@ -986,11 +1074,11 @@ class AdminUserService:
             )
 
         self.repo.create_audit_log(
-            org_id=current_user.org_id,
+            org_id=active_org_id,
             actor_user_id=current_user.user_id,
             target_type="functional_role",
             target_id=role_id,
-            action="ADMIN_UPDATE_FUNCTION_ROLE_STATUS",
+            action=action,
             result="SUCCESS",
             metadata={"isActive": is_active},
         )

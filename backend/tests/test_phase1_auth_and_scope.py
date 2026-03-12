@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.api.auth import auth_context
 from app.core.config import Settings
 from app.core.db import Base
 from app.core.security import api_key_prefix
@@ -52,6 +53,17 @@ def test_auth_service_login_refresh_and_replay_protection() -> None:
 
         me = auth.get_current_user_from_access_token(login.access_token)
         assert me.user_id == login.user.user_id
+
+        service_context = auth.get_auth_context(current_user=me)
+        assert service_context.scope_mode == "ORG_SCOPED"
+        assert service_context.active_org is not None
+        assert service_context.active_org.org_id == settings.default_org_id
+        assert any(item.org_id == settings.default_org_id for item in service_context.available_orgs)
+
+        api_context = auth_context(current_user=me, db=db)
+        assert api_context.scopeMode == "ORG_SCOPED"
+        assert api_context.activeOrg is not None
+        assert api_context.activeOrg.orgId == settings.default_org_id
 
         refreshed = auth.refresh_access_token(
             refresh_token=login.refresh_token,

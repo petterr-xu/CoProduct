@@ -30,6 +30,21 @@ class UserRepository:
     def get_organization(self, org_id: str) -> OrganizationModel | None:
         return self.db.get(OrganizationModel, org_id)
 
+    def list_active_organizations_by_user(self, *, user_id: str) -> list[OrganizationModel]:
+        stmt: Select[tuple[OrganizationModel]] = (
+            select(OrganizationModel)
+            .join(MembershipModel, MembershipModel.org_id == OrganizationModel.id)
+            .where(
+                and_(
+                    MembershipModel.user_id == user_id,
+                    MembershipModel.status == "ACTIVE",
+                    OrganizationModel.status == "ACTIVE",
+                )
+            )
+            .order_by(OrganizationModel.created_at.asc())
+        )
+        return list(self.db.execute(stmt).scalars().all())
+
     def count_users(self) -> int:
         stmt = select(func.count(UserModel.id))
         return int(self.db.execute(stmt).scalar_one() or 0)

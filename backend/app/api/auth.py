@@ -87,6 +87,18 @@ class LogoutRequest(BaseModel):
     allDevices: bool = False
 
 
+class AuthContextOrg(BaseModel):
+    orgId: str
+    orgName: str
+
+
+class AuthContextResponse(BaseModel):
+    user: LoginUser
+    activeOrg: AuthContextOrg | None
+    availableOrgs: list[AuthContextOrg]
+    scopeMode: str
+
+
 @router.post("/key-login", response_model=LoginResponse)
 def key_login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> LoginResponse:
     """Authenticate with API key and issue access/refresh tokens."""
@@ -218,4 +230,32 @@ def me(current_user: CurrentUserContext = Depends(get_current_user)) -> LoginUse
         role=current_user.role,
         orgId=current_user.org_id,
         status=current_user.status,
+    )
+
+
+@router.get("/context", response_model=AuthContextResponse)
+def auth_context(
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AuthContextResponse:
+    """Return authenticated user context including active and available organizations."""
+    service = _build_auth_service(db)
+    context = service.get_auth_context(current_user=current_user)
+
+    return AuthContextResponse(
+        user=LoginUser(
+            id=context.user.user_id,
+            email=context.user.email,
+            displayName=context.user.display_name,
+            role=context.user.role,
+            orgId=context.user.org_id,
+            status=context.user.status,
+        ),
+        activeOrg=(
+            AuthContextOrg(orgId=context.active_org.org_id, orgName=context.active_org.org_name)
+            if context.active_org is not None
+            else None
+        ),
+        availableOrgs=[AuthContextOrg(orgId=item.org_id, orgName=item.org_name) for item in context.available_orgs],
+        scopeMode=context.scope_mode,
     )
