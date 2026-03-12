@@ -9,6 +9,14 @@ from app.models.prereview import (
     SessionModel,
     UploadedFileModel,
 )
+from app.models.user_management import (
+    ApiKeyModel,
+    AuditLogModel,
+    AuthSessionModel,
+    MembershipModel,
+    OrganizationModel,
+    UserModel,
+)
 
 __all__ = [
     "RequestModel",
@@ -18,4 +26,10 @@ __all__ = [
     "UploadedFileModel",
     "KnowledgeDocumentModel",
     "KnowledgeChunkModel",
+    "OrganizationModel",
+    "UserModel",
+    "MembershipModel",
+    "ApiKeyModel",
+    "AuthSessionModel",
+    "AuditLogModel",
 ]

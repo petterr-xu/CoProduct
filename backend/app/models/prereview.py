@@ -25,6 +25,13 @@ class RequestModel(Base):
     background_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     business_domain: Mapped[str | None] = mapped_column(String(128), nullable=True)
     module_hint: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    org_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("organizations.id"), nullable=True, index=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
@@ -44,6 +51,13 @@ class SessionModel(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    org_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("organizations.id"), nullable=True, index=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
 
 
 class ReportModel(Base):
@@ -90,6 +104,13 @@ class UploadedFileModel(Base):
     mime_type: Mapped[str] = mapped_column(String(128), nullable=False, default="application/octet-stream")
     storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
     parse_status: Mapped[str] = mapped_column(String(32), nullable=False, default="PENDING")
+    org_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("organizations.id"), nullable=True, index=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
