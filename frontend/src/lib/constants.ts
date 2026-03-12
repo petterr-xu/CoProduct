@@ -1,4 +1,4 @@
-import { CapabilityStatus, SessionStatus } from '@/types';
+import { ApiKeyStatus, CapabilityStatus, MemberStatus, Role, SessionStatus, UserStatus } from '@/types';
 
 export const STATUS_COLOR_MAP: Record<CapabilityStatus, string> = {
   SUPPORTED: 'text-success bg-green-100 border-green-200',
@@ -32,6 +32,32 @@ export const SESSION_STATUS_LABEL_MAP: Record<SessionStatus, string> = {
   FAILED: '失败'
 };
 
+export const ROLE_LABEL_MAP: Record<Role, string> = {
+  OWNER: '组织所有者',
+  ADMIN: '管理员',
+  MEMBER: '成员',
+  VIEWER: '只读成员'
+};
+
+export const USER_STATUS_LABEL_MAP: Record<UserStatus, string> = {
+  ACTIVE: '激活',
+  DISABLED: '禁用',
+  PENDING_INVITE: '待邀请'
+};
+
+export const MEMBER_STATUS_LABEL_MAP: Record<MemberStatus, string> = {
+  INVITED: '待加入',
+  ACTIVE: '在岗',
+  SUSPENDED: '停用',
+  REMOVED: '移除'
+};
+
+export const API_KEY_STATUS_LABEL_MAP: Record<ApiKeyStatus, string> = {
+  ACTIVE: '可用',
+  REVOKED: '已吊销',
+  EXPIRED: '已过期'
+};
+
 export const QUERY_KEYS = {
   prereviewDetail: (sessionId: string) => ['prereview-detail', sessionId] as const,
   history: (keyword: string, capabilityStatus: string, page: number, pageSize: number) =>
@@ -39,6 +65,18 @@ export const QUERY_KEYS = {
   adminUsersRoot: ['admin-users'] as const,
   adminUsers: (query: string, role: string, status: string, page: number, pageSize: number) =>
     ['admin-users', query, role, status, page, pageSize] as const,
+  adminMembersRoot: ['admin-members'] as const,
+  adminMembers: (
+    query: string,
+    permissionRole: string,
+    memberStatus: string,
+    functionalRoleId: string,
+    page: number,
+    pageSize: number
+  ) => ['admin-members', query, permissionRole, memberStatus, functionalRoleId, page, pageSize] as const,
+  adminFunctionalRolesRoot: ['admin-functional-roles'] as const,
+  adminFunctionalRoles: (isActive: string, page: number, pageSize: number) =>
+    ['admin-functional-roles', isActive, page, pageSize] as const,
   adminApiKeysRoot: ['admin-api-keys'] as const,
   adminApiKeys: (userId: string, status: string, page: number, pageSize: number) =>
     ['admin-api-keys', userId, status, page, pageSize] as const,

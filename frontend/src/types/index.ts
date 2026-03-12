@@ -1,5 +1,6 @@
 export type Role = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
 export type UserStatus = 'ACTIVE' | 'DISABLED' | 'PENDING_INVITE';
+export type MemberStatus = 'INVITED' | 'ACTIVE' | 'SUSPENDED' | 'REMOVED';
 export type ApiKeyStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED';
 
 export type AuthUserView = {
@@ -149,6 +150,73 @@ export type UpdateUserStatusRequest = {
 
 export type UpdateUserRoleRequest = {
   role: Role;
+};
+
+export type ListMembersQuery = {
+  query?: string;
+  permissionRole?: Role;
+  memberStatus?: MemberStatus;
+  functionalRoleId?: string;
+  page: number;
+  pageSize: number;
+};
+
+export type MemberListItem = {
+  membershipId: string;
+  userId: string;
+  email: string;
+  displayName: string;
+  permissionRole: Role;
+  memberStatus: MemberStatus;
+  functionalRoleId: string;
+  functionalRoleCode: string;
+  functionalRoleName: string;
+  orgId: string;
+  createdAt: string;
+  lastLoginAt: string | null;
+};
+
+export type UpdateMemberRoleRequest = {
+  role: Role;
+  reason?: string;
+};
+
+export type UpdateMemberStatusRequest = {
+  status: MemberStatus;
+  reason?: string;
+};
+
+export type UpdateMemberFunctionalRoleRequest = {
+  functionalRoleId: string;
+  reason?: string;
+};
+
+export type ListFunctionalRolesQuery = {
+  isActive?: boolean;
+  page: number;
+  pageSize: number;
+};
+
+export type FunctionalRoleView = {
+  id: string;
+  orgId: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateFunctionalRoleRequest = {
+  code: string;
+  name: string;
+  description?: string;
+};
+
+export type UpdateFunctionalRoleStatusRequest = {
+  isActive: boolean;
 };
 
 export type IssueApiKeyRequest = {

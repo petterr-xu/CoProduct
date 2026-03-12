@@ -3,21 +3,31 @@ import {
   ApiKeyStatus,
   AuditLogItem,
   CapabilityStatus,
+  CreateFunctionalRoleRequest,
   CreateUserRequest,
   CreatePreReviewForm,
   FileParseStatus,
+  FunctionalRoleView,
   HistoryItem,
   HistoryListResponse,
   HistoryQuery,
   IssueApiKeyRequest,
   IssueApiKeyResponse,
+  ListFunctionalRolesQuery,
+  ListMembersQuery,
   ListApiKeysQuery,
   ListAuditLogsQuery,
   ListResponse,
   ListUsersQuery,
+  MemberListItem,
+  MemberStatus,
   PreReviewReportView,
   Role,
   SessionStatus,
+  UpdateFunctionalRoleStatusRequest,
+  UpdateMemberFunctionalRoleRequest,
+  UpdateMemberRoleRequest,
+  UpdateMemberStatusRequest,
   UpdateUserRoleRequest,
   UpdateUserStatusRequest,
   UserListItem,
@@ -49,6 +59,10 @@ export function getApiErrorMessage(error: unknown, fallback = '请求失败，�
     if (error.code === 'API_KEY_REVOKED') return '该密钥已被吊销，请联系管理员。';
     if (error.code === 'RATE_LIMITED') return '请求过于频繁，请稍后再试。';
     if (error.code === 'RESOURCE_NOT_FOUND') return '目标资源不存在。';
+    if (error.code === 'LAST_OWNER_PROTECTED') return '组织至少需要保留一名可用的所有者。';
+    if (error.code === 'SELF_OPERATION_FORBIDDEN') return '该操作会影响当前登录身份，已被系统拦截。';
+    if (error.code === 'OWNER_GUARD_VIOLATION') return '管理员不能直接操作所有者成员。';
+    if (error.code === 'FUNCTION_ROLE_MISMATCH') return '所选职能角色与当前组织不匹配。';
     if (error.code === 'AUTH_ERROR' || error.code === 'TOKEN_EXPIRED') return '登录状态已失效，请重新登录。';
     if (error.httpStatus === 401) return '登录状态已失效，请重新登录。';
     if (error.httpStatus === 403) return '当前账号没有此操作权限。';
@@ -71,6 +85,7 @@ const CAPABILITY_STATUS_SET = new Set<CapabilityStatus>([
 ]);
 const ROLE_SET = new Set<Role>(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']);
 const USER_STATUS_SET = new Set<UserStatus>(['ACTIVE', 'DISABLED', 'PENDING_INVITE']);
+const MEMBER_STATUS_SET = new Set<MemberStatus>(['INVITED', 'ACTIVE', 'SUSPENDED', 'REMOVED']);
 const API_KEY_STATUS_SET = new Set<ApiKeyStatus>(['ACTIVE', 'REVOKED', 'EXPIRED']);
 const CONFIDENCE_SET = new Set(['high', 'medium', 'low']);
 const FILE_PARSE_STATUS_SET = new Set<FileParseStatus>(['PENDING', 'PARSING', 'DONE', 'FAILED']);
@@ -132,6 +147,14 @@ function normalizeUserStatus(value: unknown): UserStatus {
   const text = asString(value).toUpperCase();
   if (USER_STATUS_SET.has(text as UserStatus)) {
     return text as UserStatus;
+  }
+  return 'ACTIVE';
+}
+
+function normalizeMemberStatus(value: unknown): MemberStatus {
+  const text = asString(value).toUpperCase();
+  if (MEMBER_STATUS_SET.has(text as MemberStatus)) {
+    return text as MemberStatus;
   }
   return 'ACTIVE';
 }
@@ -295,6 +318,39 @@ function normalizeAuditLogItem(payload: unknown): AuditLogItem {
     targetId: pickNullableString(row, ['targetId', 'target_id']),
     result: pickNullableString(row, ['result']),
     createdAt: pickString(row, ['createdAt', 'created_at'])
+  };
+}
+
+function normalizeMemberItem(payload: unknown): MemberListItem {
+  const row = (payload ?? {}) as Record<string, unknown>;
+  return {
+    membershipId: pickString(row, ['membershipId', 'membership_id']),
+    userId: pickString(row, ['userId', 'user_id']),
+    email: pickString(row, ['email']),
+    displayName: pickString(row, ['displayName', 'display_name']),
+    permissionRole: normalizeRole(row.permissionRole ?? row.role),
+    memberStatus: normalizeMemberStatus(row.memberStatus ?? row.status),
+    functionalRoleId: pickString(row, ['functionalRoleId', 'functional_role_id']),
+    functionalRoleCode: pickString(row, ['functionalRoleCode', 'functional_role_code']),
+    functionalRoleName: pickString(row, ['functionalRoleName', 'functional_role_name']),
+    orgId: pickString(row, ['orgId', 'org_id']),
+    createdAt: pickString(row, ['createdAt', 'created_at']),
+    lastLoginAt: pickNullableString(row, ['lastLoginAt', 'last_login_at'])
+  };
+}
+
+function normalizeFunctionalRoleItem(payload: unknown): FunctionalRoleView {
+  const row = (payload ?? {}) as Record<string, unknown>;
+  return {
+    id: pickString(row, ['id']),
+    orgId: pickString(row, ['orgId', 'org_id']),
+    code: pickString(row, ['code']),
+    name: pickString(row, ['name']),
+    description: pickNullableString(row, ['description']),
+    isActive: Boolean(row.isActive ?? row.is_active),
+    sortOrder: asNumber(row.sortOrder ?? row.sort_order, 100),
+    createdAt: pickString(row, ['createdAt', 'created_at']),
+    updatedAt: pickString(row, ['updatedAt', 'updated_at'])
   };
 }
 
@@ -484,6 +540,20 @@ export const apiClient = {
     return normalizeListResponse(raw, normalizeUserItem);
   },
 
+  async listMembers(query: ListMembersQuery): Promise<ListResponse<MemberListItem>> {
+    const page = Math.max(1, Math.trunc(query.page));
+    const pageSize = Math.min(100, Math.max(1, Math.trunc(query.pageSize)));
+    const params = new URLSearchParams();
+    if (query.query) params.set('query', query.query);
+    if (query.permissionRole) params.set('permissionRole', query.permissionRole);
+    if (query.memberStatus) params.set('memberStatus', query.memberStatus);
+    if (query.functionalRoleId) params.set('functionalRoleId', query.functionalRoleId);
+    params.set('page', String(page));
+    params.set('pageSize', String(pageSize));
+    const raw = await requestJson<unknown>(`/api/admin/members?${params.toString()}`);
+    return normalizeListResponse(raw, normalizeMemberItem);
+  },
+
   async updateUserStatus(userId: string, payload: UpdateUserStatusRequest): Promise<UserListItem> {
     const raw = await requestJson<unknown>(`/api/admin/users/${userId}/status`, {
       method: 'PATCH',
@@ -498,6 +568,63 @@ export const apiClient = {
       body: JSON.stringify(payload)
     });
     return normalizeUserItem(raw);
+  },
+
+  async updateMemberRole(memberId: string, payload: UpdateMemberRoleRequest): Promise<MemberListItem> {
+    const raw = await requestJson<unknown>(`/api/admin/members/${memberId}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+    return normalizeMemberItem(raw);
+  },
+
+  async updateMemberStatus(memberId: string, payload: UpdateMemberStatusRequest): Promise<MemberListItem> {
+    const raw = await requestJson<unknown>(`/api/admin/members/${memberId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+    return normalizeMemberItem(raw);
+  },
+
+  async updateMemberFunctionalRole(
+    memberId: string,
+    payload: UpdateMemberFunctionalRoleRequest
+  ): Promise<MemberListItem> {
+    const raw = await requestJson<unknown>(`/api/admin/members/${memberId}/functional-role`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+    return normalizeMemberItem(raw);
+  },
+
+  async listFunctionalRoles(query: ListFunctionalRolesQuery): Promise<ListResponse<FunctionalRoleView>> {
+    const page = Math.max(1, Math.trunc(query.page));
+    const pageSize = Math.min(100, Math.max(1, Math.trunc(query.pageSize)));
+    const params = new URLSearchParams();
+    if (typeof query.isActive === 'boolean') params.set('isActive', query.isActive ? 'true' : 'false');
+    params.set('page', String(page));
+    params.set('pageSize', String(pageSize));
+    const raw = await requestJson<unknown>(`/api/admin/functional-roles?${params.toString()}`);
+    return normalizeListResponse(raw, normalizeFunctionalRoleItem);
+  },
+
+  async createFunctionalRole(payload: CreateFunctionalRoleRequest): Promise<FunctionalRoleView> {
+    const raw = await requestJson<unknown>('/api/admin/functional-roles', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    return normalizeFunctionalRoleItem(raw);
+  },
+
+  async updateFunctionalRoleStatus(
+    roleId: string,
+    payload: UpdateFunctionalRoleStatusRequest
+  ): Promise<FunctionalRoleView> {
+    const raw = await requestJson<unknown>(`/api/admin/functional-roles/${roleId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+    return normalizeFunctionalRoleItem(raw);
   },
 
   async issueApiKey(payload: IssueApiKeyRequest): Promise<IssueApiKeyResponse> {
