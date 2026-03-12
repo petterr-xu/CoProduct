@@ -1,5 +1,5 @@
 # 前端检查清单 - user_management
-> Version: v0.3.0
+> Version: v0.4.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
@@ -32,6 +32,15 @@
 5. 职能角色管理页可完成基础维护（查看/新增/启停用）。
 6. 成员列表支持按职能角色筛选。
 
+### 1.4 Phase 5 功能（v0.4.0 新增）
+
+1. AC-FE-501：登录后可成功请求 `GET /api/auth/context` 并渲染当前组织信息。
+2. AC-FE-502：创建成员表单不再出现 `orgId` 文本输入框，只能使用组织下拉。
+3. AC-FE-503：`scopeMode=ORG_SCOPED` 时组织下拉默认选中并不可编辑。
+4. AC-FE-504：`activeOrg=null` 时创建成员按钮禁用并显示引导提示。
+5. AC-FE-505：后端返回 `NO_ACTIVE_ORG` 时前端提示文案清晰且无静默失败。
+6. AC-FE-506：在不改接口结构的前提下，页面可兼容未来 `USER_SCOPED`（多组织选项渲染不报错）。
+
 ## 2. 契约对齐检查
 
 1. `04_frontend_contract.md` 中请求/响应类型与实际调用一致。
@@ -41,6 +50,8 @@
 5. `POST /api/auth/refresh` 与 `POST /api/auth/logout` 契约采用 Cookie 方案且实现一致。
 6. 成员接口路径演进（`users` -> `members`）在兼容期可双栈运行且前端封装一致。
 7. 职能角色字段（`functionalRoleId/name/code`）与后端契约一致。
+8. `GET /api/auth/context` 响应字段与 `04_frontend_contract.md` 一致（`activeOrg/availableOrgs/scopeMode`）。
+9. 创建成员请求中的 `orgId` 若存在，来源必须是下拉选项，不允许任意文本。
 
 ## 3. 状态/异常/空态检查
 
@@ -59,3 +70,14 @@
 3. 旧功能页面不存在死循环重定向或重复请求风暴。
 4. 在不同角色账号下，按钮与页面可见性符合权限设计。
 5. 权限红线相关失败场景展示正确文案，不出现静默失败。
+
+## 5. 追踪映射（v0.4.0 增量）
+
+| 验收项 | 关联任务 | 关联契约 |
+|---|---|---|
+| AC-FE-501 | FE-5.1 | FC-401 |
+| AC-FE-502 | FE-5.2 | FC-402 |
+| AC-FE-503 | FE-5.3 | FC-401/FC-402 |
+| AC-FE-504 | FE-5.4 | FC-403 |
+| AC-FE-505 | FE-5.4 | FC-403 |
+| AC-FE-506 | FE-5.5 | FC-401 |

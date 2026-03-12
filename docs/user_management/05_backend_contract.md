@@ -1,9 +1,9 @@
 # 后端契约文档 - user_management
-> Version: v0.3.0
+> Version: v0.4.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
-> Contract Priority (v0.3.0): 保留 `v0.2.0` 既有接口契约作为兼容基线；`v0.3.0` 新增段落定义演进后规则。
+> Contract Priority (v0.4.0): 保留 `v0.3.0` 既有接口契约作为兼容基线；`v0.4.0` 新增段落定义演进后规则。
 
 ## 1. API 列表（Method + Path）
 
@@ -13,6 +13,7 @@
 2. `POST /api/auth/refresh`
 3. `POST /api/auth/logout`
 4. `GET /api/auth/me`
+5. `GET /api/auth/context`（v0.4.0 新增）
 
 ### 1.2 管理域（Phase 2）
 
@@ -120,6 +121,16 @@ v0.2.0 生效规则：
 3. 更新角色：`role in [OWNER, ADMIN, MEMBER, VIEWER]`。
 4. 签发密钥：`userId/name` 必填；`expiresAt` 可选 ISO 时间。
 
+### 2.4A `GET /api/auth/context`（v0.4.0 新增）
+
+请求体：无。
+
+校验：
+
+1. 必须已通过 `Authorization: Bearer <accessToken>` 鉴权。
+2. 基于当前会话加载用户与组织上下文。
+3. 若当前用户没有可用组织，`activeOrg` 返回 `null`，并允许业务接口按策略返回 `NO_ACTIVE_ORG`。
+
 ### 2.5 管理接口请求细化（v0.2.0）
 
 1. `GET /api/admin/users`
@@ -134,6 +145,14 @@ v0.2.0 生效规则：
   "orgId": "org_default"
 }
 ```
+
+> Obsolete in v0.4.0: `orgId` 自由输入语义废弃，仅保留兼容字段。
+
+v0.4.0 生效规则：
+
+1. `orgId` 缺省：默认使用 `current_user.org_id`。
+2. `orgId` 传入且不等于 `current_user.org_id`：返回 `403 PERMISSION_DENIED`。
+3. `current_user.org_id` 为空：返回 `403 NO_ACTIVE_ORG`。
 
 3. `PATCH /api/admin/users/{user_id}/status`
 
@@ -261,6 +280,38 @@ v0.2.0 登录响应：
   "status": "ACTIVE"
 }
 ```
+
+### 3.2A `GET /api/auth/context` 成功响应（v0.4.0 新增）
+
+```json
+{
+  "user": {
+    "id": "usr_xxx",
+    "email": "member@coproduct.dev",
+    "displayName": "Member A",
+    "role": "MEMBER",
+    "orgId": "org_default",
+    "status": "ACTIVE"
+  },
+  "activeOrg": {
+    "orgId": "org_default",
+    "orgName": "Default Organization"
+  },
+  "availableOrgs": [
+    {
+      "orgId": "org_default",
+      "orgName": "Default Organization"
+    }
+  ],
+  "scopeMode": "ORG_SCOPED"
+}
+```
+
+字段语义：
+
+1. `activeOrg`：当前会话默认生效组织，可为 `null`。
+2. `availableOrgs`：当前用户可见组织列表。
+3. `scopeMode`：上下文作用域模式，当前阶段为 `ORG_SCOPED`，未来可扩展 `USER_SCOPED`。
 
 ### 3.3 `POST /api/auth/refresh` 成功响应（v0.2.0）
 
@@ -421,6 +472,7 @@ v0.2.0 登录响应：
 11. `SELF_OPERATION_FORBIDDEN`
 12. `OWNER_GUARD_VIOLATION`
 13. `FUNCTION_ROLE_MISMATCH`
+14. `NO_ACTIVE_ORG`
 
 统一错误体：
 
@@ -438,11 +490,11 @@ v0.2.0 登录响应：
 | 接口 | OWNER | ADMIN | MEMBER | VIEWER |
 |---|---|---|---|---|
 | `POST /api/prereview` | ✅ | ✅ | ✅ | ❌ |
-| `POST /api/prereview/{id}/regenerate` | ✅ | ✅ | ✅(本人数据) | ❌ |
-| `GET /api/prereview/{id}` | ✅ | ✅ | ✅(本人数据) | ✅ |
+| `POST /api/prereview/{session_id}/regenerate` | ✅ | ✅ | ✅(本人数据) | ❌ |
+| `GET /api/prereview/{session_id}` | ✅ | ✅ | ✅(本人数据) | ✅ |
 | `GET /api/prereview/history` | ✅ | ✅ | ✅(本人数据) | ✅ |
 | `POST /api/files/upload` | ✅ | ✅ | ✅ | ❌ |
-| `GET/POST/PATCH /api/admin/*` | ✅ | ✅ | ❌ | ❌ |
+| 管理域接口（`/api/admin/*`） | ✅ | ✅ | ❌ | ❌ |
 
 数据范围规则：
 
@@ -455,9 +507,9 @@ v0.2.0 登录响应：
 | 接口 | OWNER | ADMIN | MEMBER | VIEWER |
 |---|---|---|---|---|
 | `GET /api/admin/members` | ✅ | ✅ | ❌ | ❌ |
-| `PATCH /api/admin/members/{id}/role` | ✅ | ✅(非 owner) | ❌ | ❌ |
-| `PATCH /api/admin/members/{id}/status` | ✅ | ✅(非 owner) | ❌ | ❌ |
-| `PATCH /api/admin/members/{id}/functional-role` | ✅ | ✅(非 owner) | ❌ | ❌ |
+| `PATCH /api/admin/members/{member_id}/role` | ✅ | ✅(非 owner) | ❌ | ❌ |
+| `PATCH /api/admin/members/{member_id}/status` | ✅ | ✅(非 owner) | ❌ | ❌ |
+| `PATCH /api/admin/members/{member_id}/functional-role` | ✅ | ✅(非 owner) | ❌ | ❌ |
 | `GET/POST /api/admin/functional-roles` | ✅ | ✅ | ❌ | ❌ |
 
 治理红线约束：
@@ -466,6 +518,14 @@ v0.2.0 登录响应：
 2. `ADMIN` 不能修改 `OWNER` 成员。
 3. 禁止危险自操作（自降权/自禁用）。
 
+### 4.5 v0.4.0 上下文与组织规则（新增）
+
+| 接口 | 规则 |
+|---|---|
+| `GET /api/auth/context` | 任意已登录角色可调用；仅返回当前用户可见组织上下文 |
+| `POST /api/admin/users` | 组织来源受当前上下文约束；不允许跨组织创建成员 |
+| 管理写接口（`/api/admin/*`） | 当 `activeOrg` 缺失时返回 `NO_ACTIVE_ORG`，拒绝写入 |
+
 ## 5. 与前端契约对齐说明
 
 1. 与 `04_frontend_contract.md` 路径、字段名、枚举值逐项对齐。
@@ -473,3 +533,12 @@ v0.2.0 登录响应：
 3. 保留既有业务接口 body，不做破坏性改动，仅升级鉴权机制。
 4. 新增业务字段（`orgId/createdByUserId`）应为可选，避免旧前端解析失败。
 5. 管理接口演进遵循“旧接口保留 + 新接口追加”策略，兼容期允许双路由并存。
+6. v0.4.0 新增 `GET /api/auth/context`，与前端 `AuthContextResponse` 字段一一对齐。
+
+## 6. Contract Item IDs（v0.4.0 增量）
+
+| Contract ID | 说明 | 关联端点 |
+|---|---|---|
+| BC-401 | 登录上下文接口契约（`activeOrg/availableOrgs/scopeMode`） | `GET /api/auth/context` |
+| BC-402 | 创建成员组织约束契约（`orgId` 兼容字段收敛） | `POST /api/admin/users` |
+| BC-403 | 无组织上下文拒绝契约 | 管理写接口 + `NO_ACTIVE_ORG` |

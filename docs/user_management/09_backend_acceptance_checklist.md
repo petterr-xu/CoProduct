@@ -1,5 +1,5 @@
 # 后端检查清单 - user_management
-> Version: v0.3.0
+> Version: v0.4.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
@@ -32,6 +32,15 @@
 5. 新增职能角色接口（查询/创建/启停用）可用。
 6. 成员禁用后，关联 API key 与会话联动失效符合策略。
 
+### 1.4 Phase 5 功能（v0.4.0 新增）
+
+1. AC-BE-501：`GET /api/auth/context` 可返回 `user/activeOrg/availableOrgs/scopeMode`。
+2. AC-BE-502：`POST /api/admin/users` 在 `orgId` 缺省时默认使用 `current_user.org_id`。
+3. AC-BE-503：`POST /api/admin/users` 在跨组织 `orgId` 传入时稳定返回 `PERMISSION_DENIED`。
+4. AC-BE-504：当前用户无组织上下文时，管理写接口返回 `NO_ACTIVE_ORG`。
+5. AC-BE-505：`NO_ACTIVE_ORG` 与跨组织拒绝均写入审计日志（`result=FAILED`）。
+6. AC-BE-506：`scopeMode` 当前固定 `ORG_SCOPED`，契约字段稳定可解析。
+
 ## 2. 契约对齐检查
 
 1. `05_backend_contract.md` 中路由、方法、字段与实现一致。
@@ -62,3 +71,15 @@
 6. refresh token 重放会被拦截并产生审计/指标记录。
 7. 灰度期 `auth_legacy_fallback_total` 指标可用且可下钻排查。
 8. 治理拒绝类错误（`LAST_OWNER_PROTECTED` 等）具备稳定状态码与审计记录。
+9. `NO_ACTIVE_ORG` 错误码在契约、实现、日志中一致。
+
+## 5. 追踪映射（v0.4.0 增量）
+
+| 验收项 | 关联任务 | 关联契约 |
+|---|---|---|
+| AC-BE-501 | BE-5.1 | BC-401 |
+| AC-BE-502 | BE-5.2 | BC-402 |
+| AC-BE-503 | BE-5.2 | BC-402 |
+| AC-BE-504 | BE-5.3 | BC-403 |
+| AC-BE-505 | BE-5.3 | BC-403 |
+| AC-BE-506 | BE-5.4 | BC-401 |

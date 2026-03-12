@@ -1,9 +1,9 @@
 # 后端技术落地方案 - user_management
-> Version: v0.3.0
+> Version: v0.4.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
-> Design Priority (v0.3.0): 若旧段落与 v0.3.0 新增规则冲突，以 v0.3.0 为准。
+> Design Priority (v0.4.0): 若旧段落与 v0.4.0 新增规则冲突，以 v0.4.0 为准；v0.3.0 作为兼容基线保留。
 
 ## 1. 模块边界与服务分层
 
@@ -22,6 +22,8 @@
 2. `app/api/admin_functional_roles.py`：职能角色管理接口。
 3. `app/services/admin_member_service.py`：成员治理规则与红线判定。
 4. `app/core/permission_policy.py`：权限判断 + 治理红线集中封装。
+5. `app/api/auth.py` 增补 `GET /api/auth/context`（统一登录上下文）。
+6. `app/services/auth_service.py` 增补上下文组装能力（`activeOrg/availableOrgs/scopeMode`）。
 
 ## 2. 身份与权限模型实现
 
@@ -63,6 +65,16 @@
 - 对非 owner 角色同理禁止把自己改成不可恢复状态（可按策略配置）。
 3. 高风险拒绝行为审计：
 - 拒绝类操作写 `result=FAILED` 审计，记录 `reason`。
+
+### 2.5 登录上下文模型（v0.4.0）
+
+1. `AuthContext` 响应模型：
+- `user`：当前登录用户基础信息。
+- `activeOrg`：当前生效组织（可为空）。
+- `availableOrgs`：当前用户可访问组织集合。
+- `scopeMode`：`ORG_SCOPED | USER_SCOPED`。
+2. 当前阶段（API Key 登录）默认 `scopeMode=ORG_SCOPED`，`availableOrgs` 至少包含 `activeOrg`。
+3. 未来用户态登录（密码/SSO）可扩展 `scopeMode=USER_SCOPED`，无需破坏响应结构。
 
 ## 3. 接口与流程编排
 
@@ -106,6 +118,18 @@ sequenceDiagram
 2. `SELF_OPERATION_FORBIDDEN`
 3. `FUNCTION_ROLE_MISMATCH`
 4. `LAST_OWNER_PROTECTED`
+
+### 3.4 组织上下文与创建成员约束（v0.4.0）
+
+1. 新增 `GET /api/auth/context`：
+- 从当前会话 `current_user` 出发，返回上下文信息。
+2. `POST /api/admin/users` 组织规则：
+- `orgId` 允许兼容传入，但标记为 deprecated。
+- `orgId` 缺省时使用 `current_user.org_id`。
+- `orgId` 传入且不等于 `current_user.org_id` 时返回 `PERMISSION_DENIED`。
+- `current_user.org_id` 缺失时返回 `NO_ACTIVE_ORG`。
+3. 兼容性原则：
+- 保留旧请求结构，先收紧语义约束，再推进字段收敛。
 
 ## 4. 持久化与迁移策略
 
@@ -175,6 +199,13 @@ sequenceDiagram
 3. 治理红线落地（至少一个 owner + 禁止危险自操作）。
 4. 职能角色建模与接口上线。
 
+### Phase 5（v0.4.0 新增）
+
+1. 新增 `GET /api/auth/context`，统一登录后上下文读取入口。
+2. 创建成员接口补充 `orgId` 语义收敛（兼容字段 + 服务端强约束）。
+3. 新增 `NO_ACTIVE_ORG` 错误码与审计事件，明确无组织场景行为。
+4. 为后续多组织登录准备 `scopeMode` 与组织列表查询能力。
+
 ## 8. 风险点与缓解（v0.3.0）
 
 1. 风险：权限收紧后历史自动化脚本失败。
@@ -183,3 +214,22 @@ sequenceDiagram
 - 缓解：迁移脚本强校验 + 失败即回滚事务。
 3. 风险：治理红线影响紧急处理效率。
 - 缓解：提供受控 break-glass 路径，要求双人复核并强审计。
+4. 风险：上下文口径与前端假设不一致，导致页面行为偏差。
+- 缓解：`auth/context` 作为唯一上下文事实来源；`auth/me` 仅保留基础身份展示。
+
+## 9. BE 追踪矩阵（v0.4.0 增量）
+
+| TD ID | BE 模块 | API | 数据/约束 | 守卫与错误 | 测试要点 |
+|---|---|---|---|---|---|
+| TD-401 | `api/auth.py` + `auth_service.py` | `GET /api/auth/context` | 读取 membership 组装上下文 | 未登录返回 401 | context 字段完整性 |
+| TD-402 | `api/admin_users.py` + `admin_user_service.py` | `POST /api/admin/users` | 废弃自由输入 org 语义 | 跨组织返回 403 | 组织来源受控 |
+| TD-403 | `admin_user_service.py` | 同上 | `current_user.org_id` 必须存在 | `NO_ACTIVE_ORG` | 无组织场景回归 |
+| TD-404 | `auth_service.py` | `GET /api/auth/context` | `scopeMode` 扩展位 | 未知模式降级 | ORG_SCOPED/USER_SCOPED 兼容 |
+
+## 10. 风险实现计划（v0.4.0 增量）
+
+| 风险 | 缓解策略 | 代码级实现 |
+|---|---|---|
+| 前端手填 orgId 造成越权歧义 | 服务端忽略自由输入来源，强制校验当前组织 | `AdminUserService.create_user` 组织归属判定 |
+| 上下文信息散落在多个接口 | 提供单一 `auth/context` 入口 | `GET /api/auth/context` + 统一 response model |
+| 无组织用户行为不确定 | 新增专用错误码与审计 | `NO_ACTIVE_ORG` + audit `FAILED` 事件 |

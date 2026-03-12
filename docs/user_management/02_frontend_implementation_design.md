@@ -1,9 +1,9 @@
 # 前端技术落地方案 - user_management
-> Version: v0.3.0
+> Version: v0.4.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
-> Design Priority (v0.3.0): 若旧段落与 v0.3.0 新增规则冲突，以 v0.3.0 为准。
+> Design Priority (v0.4.0): 若旧段落与 v0.4.0 新增规则冲突，以 v0.4.0 为准；v0.3.0 作为兼容基线保留。
 
 ## 1. 页面与交互范围
 
@@ -12,6 +12,7 @@
 1. 登录页（`/login`）：输入 API Key 完成登录。
 2. 受保护业务页：未登录自动跳转。
 3. 用户信息入口：展示账号与权限角色。
+4. v0.4.0 新增：显示“当前组织”并在创建成员时提供组织下拉。
 
 ### 1.2 管理侧范围（Phase 2 已完成，Phase 4 增强）
 
@@ -20,6 +21,9 @@
 - 职能角色管理页面（列表/新建/启停用）。
 - 成员详情编辑中的“权限角色 + 职能角色 + 成员状态”联动校验。
 - 高风险操作前置提示（自操作限制、owner 约束提示）。
+3. 新增（Phase 5）：
+- 创建成员表单移除 `orgId` 文本输入，改为组织下拉。
+- 当 `AuthContext.activeOrg` 为空时，禁用创建成员并展示引导提示。
 
 ## 2. 前端领域模型
 
@@ -42,6 +46,7 @@
 ## 3. 模块设计与目录建议
 
 1. `src/features/auth/`：认证状态与登录链路。
+2. `src/features/auth-context/`：登录上下文加载与组织选择状态。
 2. `src/features/admin-members/`：成员列表、成员编辑、高风险操作确认。
 3. `src/features/admin-functional-roles/`：职能角色管理。
 4. `src/lib/acl.ts`：统一前端权限可见性策略（仅做展示层，不替代后端）。
@@ -55,6 +60,7 @@
 2. `POST /api/auth/refresh`
 3. `POST /api/auth/logout`
 4. `GET /api/auth/me`
+5. `GET /api/auth/context`（v0.4.0 新增）
 
 ### 4.2 管理链路（Phase 4 增强）
 
@@ -64,6 +70,21 @@
 - `POST /api/admin/functional-roles`
 - `PATCH /api/admin/members/{id}/functional-role`
 3. 管理列表统一分页契约：`items/total/page/pageSize`。
+
+### 4.4 上下文驱动组织选择（v0.4.0）
+
+1. 页面初始化顺序：
+- 先加载 `auth/me`。
+- 再加载 `auth/context`，拿到 `activeOrg` 与 `availableOrgs`。
+2. 创建成员表单规则：
+- 组织选项来源仅限 `availableOrgs`。
+- `ORG_SCOPED` 下默认选中并锁定 `activeOrg`。
+- `USER_SCOPED`（未来）允许在下拉中切换组织后提交。
+3. 无组织处理：
+- `activeOrg == null` 时禁用“创建成员”按钮。
+- 页面展示“当前账号无可用组织，请联系管理员”。
+
+> Obsolete in v0.4.0: 创建成员时手工输入 `orgId` 的文本框交互已过时。
 
 ### 4.3 契约兼容策略
 
@@ -127,6 +148,13 @@
 3. 高风险治理规则前端显式提示与按钮禁用。
 4. 枚举文案可读化统一改造。
 
+### Phase 5（v0.4.0 新增）
+
+1. 登录上下文接入（`/api/auth/context`）并完成状态管理。
+2. 创建成员组织输入改为下拉选择（上下文驱动）。
+3. 无组织场景 UI 引导与错误提示（`NO_ACTIVE_ORG`）。
+4. 为未来多组织登录保留 `USER_SCOPED` 展示与交互分支。
+
 ## 8. 风险与缓解
 
 1. 风险：后端规则先收紧导致前端按钮可点击但请求失败。
@@ -135,3 +163,14 @@
 - 缓解：API client 统一封装路由选择，页面层禁止拼接路径。
 3. 风险：枚举文案映射漏配导致展示空白。
 - 缓解：映射函数提供兜底 `未知(<raw>)`，并打日志告警。
+4. 风险：上下文拉取失败导致管理页交互不可用。
+- 缓解：上下文加载失败时阻断高风险写操作，仅保留只读视图并提示重试。
+
+## 9. FE 追踪矩阵（v0.4.0 增量）
+
+| TD ID | FE 模块 | API | 状态管理 | 错误处理 | 测试要点 |
+|---|---|---|---|---|---|
+| TD-401 | `features/auth-context` | `GET /api/auth/context` | `auth-store/context-store` | context 拉取失败降级只读 | context 成功/失败分支 |
+| TD-402 | `features/admin-members` | `POST /api/admin/users` | 创建表单本地状态 | 禁止自由输入 orgId | 组织下拉仅来源于 context |
+| TD-403 | `features/admin-members` | 同上 | 提交前校验 activeOrg | `NO_ACTIVE_ORG` 提示引导 | 无 activeOrg 禁止创建 |
+| TD-404 | `features/auth-context` | `GET /api/auth/context` | `scopeMode` 分支 | 未知模式兜底 ORG_SCOPED | ORG_SCOPED/USER_SCOPED UI 分支 |

@@ -1,9 +1,9 @@
 # 前端契约文档 - user_management
-> Version: v0.3.0
+> Version: v0.4.0
 > Last Updated: 2026-03-12
 > Status: Draft
 
-> Contract Priority (v0.3.0): 若旧段落与 `v0.3.0` 新增规则冲突，以 `v0.3.0` 为准；`v0.2.0` 作为兼容基线保留。
+> Contract Priority (v0.4.0): 若旧段落与 `v0.4.0` 新增规则冲突，以 `v0.4.0` 为准；`v0.3.0` 作为兼容基线保留。
 
 ## 1. 请求模型（前端视角）
 
@@ -39,6 +39,10 @@ type LogoutRequest = {
 
 - 无请求体。
 
+5. `GET /api/auth/context`（v0.4.0 新增）
+
+- 无请求体。
+
 > Obsolete in v0.2.0: `RefreshTokenRequest` 与 `LogoutRequest.refreshToken` 的请求体 token 传输不再作为主路径。
 
 v0.2.0 生效规则：
@@ -66,6 +70,14 @@ type CreateUserRequest = {
   orgId?: string;
 };
 ```
+
+> Obsolete in v0.4.0: 前端“手工输入 `orgId`”交互已废弃，`orgId` 仅允许来自 `AuthContext.availableOrgs` 下拉选项。
+
+v0.4.0 生效规则：
+
+1. `ORG_SCOPED` 下前端默认使用 `activeOrg.id`，不允许用户自由编辑组织 ID。
+2. `USER_SCOPED`（未来）允许选择 `availableOrgs` 中的组织后提交。
+3. 若 `activeOrg` 为空，前端必须阻断创建并提示“当前账号无可用组织”。
 
 2. `GET /api/admin/users`
 
@@ -197,6 +209,19 @@ type CreateFunctionalRoleRequest = {
 3. 所有列表接口统一 query：
 - `page`（默认 1）, `pageSize`（默认 20，最大 100）。
 
+### 1.4 既有业务接口请求（鉴权接管）
+
+1. `POST /api/prereview`
+2. `GET /api/prereview/{session_id}`
+3. `POST /api/prereview/{session_id}/regenerate`
+4. `GET /api/prereview/history`
+5. `POST /api/files/upload`
+
+说明：
+
+1. 请求体沿用业务域既有契约，不在本文件重复定义字段细节。
+2. 统一由 `Authorization: Bearer <accessToken>` 鉴权接管。
+
 ## 2. 响应模型（前端视图模型）
 
 ### 2.1 认证响应
@@ -238,6 +263,18 @@ type RefreshResponse = {
 
 type LogoutResponse = {
   success: true;
+};
+
+type AuthContextOrgView = {
+  orgId: string;
+  orgName: string;
+};
+
+type AuthContextResponse = {
+  user: AuthUserView;
+  activeOrg: AuthContextOrgView | null;
+  availableOrgs: AuthContextOrgView[];
+  scopeMode: 'ORG_SCOPED' | 'USER_SCOPED';
 };
 ```
 
@@ -382,6 +419,7 @@ type MemberStatus = 'INVITED' | 'ACTIVE' | 'SUSPENDED' | 'REMOVED';
 | `SELF_OPERATION_FORBIDDEN` | 403 | 提示“不允许对当前账号执行该敏感操作” |
 | `OWNER_GUARD_VIOLATION` | 403 | 提示“当前角色不可操作 owner 成员” |
 | `FUNCTION_ROLE_MISMATCH` | 422 | 提示“职能角色与组织不匹配” |
+| `NO_ACTIVE_ORG` | 403 | 提示“当前账号无可用组织，请联系管理员” |
 
 ## 5. 与后端契约对齐说明
 
@@ -390,3 +428,17 @@ type MemberStatus = 'INVITED' | 'ACTIVE' | 'SUSPENDED' | 'REMOVED';
 3. token 响应字段命名采用驼峰（后端同步返回驼峰字段）。
 4. 前端对新增字段默认“向后兼容”：未知字段忽略，缺失字段采用安全默认。
 5. 兼容窗口内同时支持 `/api/admin/users/*`（旧）与 `/api/admin/members/*`（新）契约。
+
+## 6. v0.4.0 兼容说明（新增）
+
+1. `GET /api/auth/context` 为前端组织上下文唯一事实来源。
+2. `CreateUserRequest.orgId` 字段在兼容期保留，但前端不再提供自由文本输入。
+3. 未来切换到用户态登录时，前端无需改动创建成员接口结构，仅切换 `scopeMode` 分支行为。
+
+## 7. Contract Item IDs（v0.4.0 增量）
+
+| Contract ID | 说明 | 关联端点/模型 |
+|---|---|---|
+| FC-401 | 登录上下文响应模型（`activeOrg/availableOrgs/scopeMode`） | `GET /api/auth/context` + `AuthContextResponse` |
+| FC-402 | 创建成员组织字段语义（仅允许上下文来源） | `POST /api/admin/users` + `CreateUserRequest.orgId?` |
+| FC-403 | 无组织上下文错误处理 | `NO_ACTIVE_ORG` 错误码映射 |
