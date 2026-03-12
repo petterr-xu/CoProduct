@@ -237,6 +237,7 @@ export type IssueApiKeyRequest = {
   userId: string;
   name: string;
   expiresAt?: string;
+  orgId?: string;
 };
 
 export type IssueApiKeyResponse = {
@@ -248,6 +249,7 @@ export type IssueApiKeyResponse = {
 
 export type ListApiKeysQuery = {
   userId?: string;
+  orgId?: string;
   status?: ApiKeyStatus;
   page: number;
   pageSize: number;
@@ -256,12 +258,34 @@ export type ListApiKeysQuery = {
 export type ApiKeyListItem = {
   keyId: string;
   userId: string;
+  userEmail?: string;
+  userDisplayName?: string;
   keyPrefix: string;
   status: ApiKeyStatus;
   name: string;
   expiresAt: string | null;
   lastUsedAt: string | null;
   createdAt: string;
+};
+
+export type ListMemberOptionsQuery = {
+  query: string;
+  orgId?: string;
+  limit?: number;
+};
+
+export type MemberOptionItem = {
+  userId: string;
+  membershipId: string;
+  email: string;
+  displayName: string;
+  permissionRole: Role;
+  memberStatus: MemberStatus;
+  orgId: string;
+};
+
+export type ListMemberOptionsResponse = {
+  items: MemberOptionItem[];
 };
 
 export type ListAuditLogsQuery = {

@@ -10,6 +10,7 @@ import {
   IssueApiKeyRequest,
   ListFunctionalRolesQuery,
   ListMembersQuery,
+  ListMemberOptionsQuery,
   ListApiKeysQuery,
   ListAuditLogsQuery,
   ListUsersQuery,
@@ -179,7 +180,7 @@ export function useAdminUpdateFunctionalRoleStatus() {
 
 export function useAdminApiKeys(query: ListApiKeysQuery) {
   return useQuery({
-    queryKey: QUERY_KEYS.adminApiKeys(query.userId ?? '', query.status ?? '', query.page, query.pageSize),
+    queryKey: QUERY_KEYS.adminApiKeys(query.userId ?? '', query.orgId ?? '', query.status ?? '', query.page, query.pageSize),
     queryFn: () => apiClient.listApiKeys(query),
     retry: (failureCount, error) => {
       if (isApiClientError(error) && error.code === 'VALIDATION_ERROR') {
@@ -188,6 +189,39 @@ export function useAdminApiKeys(query: ListApiKeysQuery) {
       return failureCount < 2;
     },
     placeholderData: (previous) => previous
+  });
+}
+
+export function useAdminMemberOptions(
+  query: ListMemberOptionsQuery,
+  options?: {
+    enabled?: boolean;
+  }
+) {
+  const enabled = options?.enabled ?? true;
+  const normalizedQuery = query.query.trim();
+  const normalizedLimit = query.limit ?? 20;
+  return useQuery({
+    queryKey: QUERY_KEYS.adminMemberOptions(query.orgId ?? '', normalizedQuery, normalizedLimit),
+    queryFn: ({ signal }) =>
+      apiClient.listMemberOptions(
+        {
+          ...query,
+          query: normalizedQuery,
+          limit: normalizedLimit
+        },
+        { signal }
+      ),
+    enabled: enabled && normalizedQuery.length >= 2,
+    retry: (failureCount, error) => {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return false;
+      }
+      if (isApiClientError(error) && error.code === 'VALIDATION_ERROR') {
+        return false;
+      }
+      return failureCount < 2;
+    }
   });
 }
 

@@ -27,17 +27,38 @@ export function isApiClientError(error: unknown): error is ApiClientError {
 }
 
 export async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutController = new AbortController();
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    timeoutController.abort();
+  }, REQUEST_TIMEOUT_MS);
+
+  const externalSignal = init.signal;
+  const mergedController = new AbortController();
+  const abortMergedSignal = () => mergedController.abort();
+
+  if (externalSignal?.aborted || timeoutController.signal.aborted) {
+    mergedController.abort();
+  } else {
+    externalSignal?.addEventListener('abort', abortMergedSignal, { once: true });
+    timeoutController.signal.addEventListener('abort', abortMergedSignal, { once: true });
+  }
+
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await fetch(url, { ...init, signal: mergedController.signal });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new ApiClientError('请求超时，请稍后重试。', { httpStatus: 408 });
+      if (timedOut) {
+        throw new ApiClientError('请求超时，请稍后重试。', { httpStatus: 408 });
+      }
+      throw error;
     }
     throw error;
   } finally {
     clearTimeout(timeoutId);
+    externalSignal?.removeEventListener('abort', abortMergedSignal);
+    timeoutController.signal.removeEventListener('abort', abortMergedSignal);
   }
 }
 
@@ -66,4 +87,3 @@ export function getCookieValue(name: string): string | null {
   }
   return null;
 }
-

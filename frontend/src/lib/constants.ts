@@ -77,9 +77,11 @@ export const QUERY_KEYS = {
   adminFunctionalRolesRoot: ['admin-functional-roles'] as const,
   adminFunctionalRoles: (isActive: string, page: number, pageSize: number) =>
     ['admin-functional-roles', isActive, page, pageSize] as const,
+  adminMemberOptions: (orgId: string, query: string, limit: number) =>
+    ['admin-member-options', orgId, query, limit] as const,
   adminApiKeysRoot: ['admin-api-keys'] as const,
-  adminApiKeys: (userId: string, status: string, page: number, pageSize: number) =>
-    ['admin-api-keys', userId, status, page, pageSize] as const,
+  adminApiKeys: (userId: string, orgId: string, status: string, page: number, pageSize: number) =>
+    ['admin-api-keys', userId, orgId, status, page, pageSize] as const,
   adminAuditLogsRoot: ['admin-audit-logs'] as const,
   adminAuditLogs: (actorUserId: string, action: string, page: number, pageSize: number) =>
     ['admin-audit-logs', actorUserId, action, page, pageSize] as const

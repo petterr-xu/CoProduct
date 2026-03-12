@@ -15,10 +15,13 @@ import {
   IssueApiKeyResponse,
   ListFunctionalRolesQuery,
   ListMembersQuery,
+  ListMemberOptionsQuery,
+  ListMemberOptionsResponse,
   ListApiKeysQuery,
   ListAuditLogsQuery,
   ListResponse,
   ListUsersQuery,
+  MemberOptionItem,
   MemberListItem,
   MemberStatus,
   PreReviewReportView,
@@ -289,6 +292,8 @@ function normalizeApiKeyItem(payload: unknown): ApiKeyListItem {
   return {
     keyId: pickString(row, ['keyId', 'key_id']),
     userId: pickString(row, ['userId', 'user_id']),
+    userEmail: pickNullableString(row, ['userEmail', 'user_email']) ?? undefined,
+    userDisplayName: pickNullableString(row, ['userDisplayName', 'user_display_name']) ?? undefined,
     keyPrefix: pickString(row, ['keyPrefix', 'key_prefix']),
     status: normalizeApiKeyStatus(row.status),
     name: pickString(row, ['name']),
@@ -340,6 +345,19 @@ function normalizeMemberItem(payload: unknown): MemberListItem {
   };
 }
 
+function normalizeMemberOptionItem(payload: unknown): MemberOptionItem {
+  const row = (payload ?? {}) as Record<string, unknown>;
+  return {
+    userId: pickString(row, ['userId', 'user_id']),
+    membershipId: pickString(row, ['membershipId', 'membership_id']),
+    email: pickString(row, ['email']),
+    displayName: pickString(row, ['displayName', 'display_name']),
+    permissionRole: normalizeRole(row.permissionRole ?? row.role),
+    memberStatus: normalizeMemberStatus(row.memberStatus ?? row.status),
+    orgId: pickString(row, ['orgId', 'org_id'])
+  };
+}
+
 function normalizeFunctionalRoleItem(payload: unknown): FunctionalRoleView {
   const row = (payload ?? {}) as Record<string, unknown>;
   return {
@@ -358,6 +376,7 @@ function normalizeFunctionalRoleItem(payload: unknown): FunctionalRoleView {
 type RequestOptions = {
   requiresAuth?: boolean;
   retryOnUnauthorized?: boolean;
+  signal?: AbortSignal;
 };
 
 async function ensureFreshAccessToken(): Promise<string> {
@@ -393,7 +412,8 @@ async function performRequest(path: string, init?: RequestInit, options?: Reques
     ...init,
     credentials: 'include',
     cache: 'no-store',
-    headers: buildHeaders(init, requiresAuth)
+    headers: buildHeaders(init, requiresAuth),
+    signal: options?.signal ?? init?.signal
   };
 
   let response: Response;
@@ -401,6 +421,7 @@ async function performRequest(path: string, init?: RequestInit, options?: Reques
     response = await fetchWithTimeout(url, requestInit);
   } catch (error) {
     if (error instanceof ApiClientError) throw error;
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
     throw new ApiClientError('网络异常，请检查服务是否可访问。', { httpStatus: 0 });
   }
 
@@ -429,6 +450,9 @@ async function performRequest(path: string, init?: RequestInit, options?: Reques
         status: retryDetail?.status
       });
     } catch (refreshError) {
+      if (refreshError instanceof DOMException && refreshError.name === 'AbortError') {
+        throw refreshError;
+      }
       useAuthStore.getState().clearSession();
       if (refreshError instanceof ApiClientError) {
         throw refreshError;
@@ -552,6 +576,53 @@ export const apiClient = {
     return normalizeListResponse(raw, normalizeMemberItem);
   },
 
+  async listMemberOptions(
+    query: ListMemberOptionsQuery,
+    options?: { signal?: AbortSignal }
+  ): Promise<ListMemberOptionsResponse> {
+    const limit = Math.min(50, Math.max(1, Math.trunc(query.limit ?? 20)));
+    const params = new URLSearchParams();
+    params.set('query', query.query.trim());
+    if (query.orgId) params.set('orgId', query.orgId);
+    params.set('limit', String(limit));
+    try {
+      const raw = await requestJson<unknown>(`/api/admin/member-options?${params.toString()}`, undefined, {
+        signal: options?.signal
+      });
+      const data = (raw ?? {}) as Record<string, unknown>;
+      return {
+        items: asArray(data.items).map((item) => normalizeMemberOptionItem(item))
+      };
+    } catch (error) {
+      if (!isApiClientError(error) || error.httpStatus !== 404) {
+        throw error;
+      }
+      // Backward-compatible fallback for environments that have not exposed /member-options yet.
+      const fallbackParams = new URLSearchParams();
+      fallbackParams.set('query', query.query.trim());
+      fallbackParams.set('page', '1');
+      fallbackParams.set('pageSize', String(limit));
+      const fallbackRaw = await requestJson<unknown>(`/api/admin/members?${fallbackParams.toString()}`, undefined, {
+        signal: options?.signal
+      });
+      const fallbackList = normalizeListResponse(fallbackRaw, normalizeMemberItem);
+      const filteredItems = query.orgId
+        ? fallbackList.items.filter((item) => item.orgId === query.orgId)
+        : fallbackList.items;
+      return {
+        items: filteredItems.map((item) => ({
+          userId: item.userId,
+          membershipId: item.membershipId,
+          email: item.email,
+          displayName: item.displayName,
+          permissionRole: item.permissionRole,
+          memberStatus: item.memberStatus,
+          orgId: item.orgId
+        }))
+      };
+    }
+  },
+
   async updateUserStatus(userId: string, payload: UpdateUserStatusRequest): Promise<UserListItem> {
     const raw = await requestJson<unknown>(`/api/admin/users/${userId}/status`, {
       method: 'PATCH',
@@ -638,6 +709,7 @@ export const apiClient = {
     const pageSize = Math.min(100, Math.max(1, Math.trunc(query.pageSize)));
     const params = new URLSearchParams();
     if (query.userId) params.set('userId', query.userId);
+    if (query.orgId) params.set('orgId', query.orgId);
     if (query.status) params.set('status', query.status);
     params.set('page', String(page));
     params.set('pageSize', String(pageSize));
