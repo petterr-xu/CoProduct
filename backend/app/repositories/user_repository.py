@@ -6,7 +6,15 @@ from datetime import datetime, timezone
 from sqlalchemy import Select, and_, desc, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models import ApiKeyModel, AuditLogModel, AuthSessionModel, MembershipModel, OrganizationModel, UserModel
+from app.models import (
+    ApiKeyModel,
+    AuditLogModel,
+    AuthSessionModel,
+    FunctionalRoleModel,
+    MembershipModel,
+    OrganizationModel,
+    UserModel,
+)
 
 
 def utc_now() -> datetime:
@@ -33,6 +41,28 @@ class UserRepository:
             self.db.add(org)
             self.db.flush()
         return org
+
+    def get_or_create_default_functional_role(self, *, org_id: str) -> FunctionalRoleModel:
+        stmt: Select[tuple[FunctionalRoleModel]] = (
+            select(FunctionalRoleModel)
+            .where(and_(FunctionalRoleModel.org_id == org_id, FunctionalRoleModel.code == "unassigned"))
+            .limit(1)
+        )
+        role = self.db.execute(stmt).scalar_one_or_none()
+        if role is not None:
+            return role
+
+        role = FunctionalRoleModel(
+            org_id=org_id,
+            code="unassigned",
+            name="未分配",
+            description="默认职能角色",
+            is_active=True,
+            sort_order=9999,
+        )
+        self.db.add(role)
+        self.db.flush()
+        return role
 
     def get_user_by_email(self, email: str) -> UserModel | None:
         stmt: Select[tuple[UserModel]] = select(UserModel).where(UserModel.email == email).limit(1)
@@ -72,11 +102,46 @@ class UserRepository:
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
+    def get_membership_by_id(self, membership_id: str) -> MembershipModel | None:
+        return self.db.get(MembershipModel, membership_id)
+
     def update_membership_role(self, *, user_id: str, org_id: str, role: str) -> MembershipModel | None:
         membership = self.get_membership(user_id=user_id, org_id=org_id)
         if membership is None:
             return None
         membership.role = role
+        self.db.add(membership)
+        self.db.flush()
+        return membership
+
+    def update_membership_role_by_id(self, *, membership_id: str, role: str) -> MembershipModel | None:
+        membership = self.get_membership_by_id(membership_id)
+        if membership is None:
+            return None
+        membership.role = role
+        self.db.add(membership)
+        self.db.flush()
+        return membership
+
+    def update_membership_status_by_id(self, *, membership_id: str, member_status: str) -> MembershipModel | None:
+        membership = self.get_membership_by_id(membership_id)
+        if membership is None:
+            return None
+        membership.status = member_status
+        self.db.add(membership)
+        self.db.flush()
+        return membership
+
+    def update_membership_functional_role_by_id(
+        self,
+        *,
+        membership_id: str,
+        functional_role_id: str,
+    ) -> MembershipModel | None:
+        membership = self.get_membership_by_id(membership_id)
+        if membership is None:
+            return None
+        membership.functional_role_id = functional_role_id
         self.db.add(membership)
         self.db.flush()
         return membership
@@ -138,6 +203,97 @@ class UserRepository:
         ]
         return total, items
 
+    def count_active_owners(self, *, org_id: str) -> int:
+        stmt = (
+            select(func.count(MembershipModel.id))
+            .select_from(MembershipModel)
+            .join(UserModel, UserModel.id == MembershipModel.user_id)
+            .where(
+                and_(
+                    MembershipModel.org_id == org_id,
+                    MembershipModel.role == "OWNER",
+                    MembershipModel.status == "ACTIVE",
+                    UserModel.status == "ACTIVE",
+                )
+            )
+        )
+        return int(self.db.execute(stmt).scalar_one() or 0)
+
+    @staticmethod
+    def _to_member_item(user: UserModel, membership: MembershipModel, function_role: FunctionalRoleModel | None) -> dict:
+        return {
+            "membershipId": membership.id,
+            "userId": user.id,
+            "email": user.email,
+            "displayName": user.display_name,
+            "permissionRole": membership.role,
+            "memberStatus": membership.status,
+            "functionalRoleId": function_role.id if function_role else "",
+            "functionalRoleCode": function_role.code if function_role else "",
+            "functionalRoleName": function_role.name if function_role else "",
+            "orgId": membership.org_id,
+            "createdAt": membership.created_at.isoformat() if membership.created_at else "",
+            "lastLoginAt": user.last_login_at.isoformat() if user.last_login_at else None,
+        }
+
+    def list_members(
+        self,
+        *,
+        org_id: str,
+        query: str | None,
+        permission_role: str | None,
+        member_status: str | None,
+        functional_role_id: str | None,
+        page: int,
+        page_size: int,
+    ) -> tuple[int, list[dict]]:
+        filters = [MembershipModel.org_id == org_id]
+        if query:
+            pattern = f"%{query.strip()}%"
+            filters.append(or_(UserModel.email.ilike(pattern), UserModel.display_name.ilike(pattern)))
+        if permission_role:
+            filters.append(MembershipModel.role == permission_role)
+        if member_status:
+            filters.append(MembershipModel.status == member_status)
+        if functional_role_id:
+            filters.append(MembershipModel.functional_role_id == functional_role_id)
+
+        total_stmt = (
+            select(func.count(MembershipModel.id))
+            .select_from(MembershipModel)
+            .join(UserModel, UserModel.id == MembershipModel.user_id)
+            .where(and_(*filters))
+        )
+        total = int(self.db.execute(total_stmt).scalar_one() or 0)
+
+        rows = self.db.execute(
+            select(UserModel, MembershipModel, FunctionalRoleModel)
+            .select_from(MembershipModel)
+            .join(UserModel, UserModel.id == MembershipModel.user_id)
+            .outerjoin(FunctionalRoleModel, FunctionalRoleModel.id == MembershipModel.functional_role_id)
+            .where(and_(*filters))
+            .order_by(desc(MembershipModel.created_at))
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).all()
+
+        items = [self._to_member_item(user, membership, function_role) for user, membership, function_role in rows]
+        return total, items
+
+    def get_member_item(self, *, membership_id: str) -> dict | None:
+        row = self.db.execute(
+            select(UserModel, MembershipModel, FunctionalRoleModel)
+            .select_from(MembershipModel)
+            .join(UserModel, UserModel.id == MembershipModel.user_id)
+            .outerjoin(FunctionalRoleModel, FunctionalRoleModel.id == MembershipModel.functional_role_id)
+            .where(MembershipModel.id == membership_id)
+            .limit(1)
+        ).one_or_none()
+        if row is None:
+            return None
+        user, membership, function_role = row
+        return self._to_member_item(user, membership, function_role)
+
     def get_active_membership(self, *, user_id: str, org_id: str) -> MembershipModel | None:
         stmt: Select[tuple[MembershipModel]] = (
             select(MembershipModel)
@@ -161,8 +317,25 @@ class UserRepository:
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def create_membership(self, *, user_id: str, org_id: str, role: str, status: str = "ACTIVE") -> MembershipModel:
-        membership = MembershipModel(user_id=user_id, org_id=org_id, role=role, status=status)
+    def create_membership(
+        self,
+        *,
+        user_id: str,
+        org_id: str,
+        role: str,
+        status: str = "ACTIVE",
+        functional_role_id: str | None = None,
+    ) -> MembershipModel:
+        role_id = functional_role_id
+        if role_id is None:
+            role_id = self.get_or_create_default_functional_role(org_id=org_id).id
+        membership = MembershipModel(
+            user_id=user_id,
+            org_id=org_id,
+            role=role,
+            status=status,
+            functional_role_id=role_id,
+        )
         self.db.add(membership)
         self.db.flush()
         return membership
@@ -249,6 +422,25 @@ class UserRepository:
         ]
         return total, items
 
+    def revoke_active_api_keys_by_user(self, *, user_id: str, org_id: str) -> int:
+        keys = list(
+            self.db.execute(
+                select(ApiKeyModel).where(
+                    and_(
+                        ApiKeyModel.user_id == user_id,
+                        ApiKeyModel.org_id == org_id,
+                        ApiKeyModel.status == "ACTIVE",
+                    )
+                )
+            ).scalars()
+        )
+        for item in keys:
+            item.status = "REVOKED"
+            item.revoked_at = utc_now()
+            self.db.add(item)
+        self.db.flush()
+        return len(keys)
+
     def revoke_api_key_and_sessions(self, *, key_id: str, org_id: str) -> tuple[ApiKeyModel | None, int]:
         api_key = self.get_api_key(key_id)
         if api_key is None or api_key.org_id != org_id:
@@ -276,6 +468,92 @@ class UserRepository:
 
         self.db.flush()
         return api_key, len(sessions)
+
+    def get_functional_role(self, role_id: str) -> FunctionalRoleModel | None:
+        return self.db.get(FunctionalRoleModel, role_id)
+
+    def find_functional_role_by_code(self, *, org_id: str, code: str) -> FunctionalRoleModel | None:
+        stmt: Select[tuple[FunctionalRoleModel]] = (
+            select(FunctionalRoleModel)
+            .where(and_(FunctionalRoleModel.org_id == org_id, FunctionalRoleModel.code == code))
+            .limit(1)
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def create_functional_role(
+        self,
+        *,
+        org_id: str,
+        code: str,
+        name: str,
+        description: str | None,
+        sort_order: int = 100,
+    ) -> FunctionalRoleModel:
+        item = FunctionalRoleModel(
+            org_id=org_id,
+            code=code,
+            name=name,
+            description=description,
+            is_active=True,
+            sort_order=sort_order,
+        )
+        self.db.add(item)
+        self.db.flush()
+        return item
+
+    def update_functional_role_status(
+        self,
+        *,
+        role_id: str,
+        is_active: bool,
+    ) -> FunctionalRoleModel | None:
+        item = self.db.get(FunctionalRoleModel, role_id)
+        if item is None:
+            return None
+        item.is_active = is_active
+        item.updated_at = utc_now()
+        self.db.add(item)
+        self.db.flush()
+        return item
+
+    def list_functional_roles(
+        self,
+        *,
+        org_id: str,
+        is_active: bool | None,
+        page: int,
+        page_size: int,
+    ) -> tuple[int, list[dict]]:
+        filters = [FunctionalRoleModel.org_id == org_id]
+        if is_active is not None:
+            filters.append(FunctionalRoleModel.is_active == is_active)
+
+        total_stmt = select(func.count(FunctionalRoleModel.id)).where(and_(*filters))
+        total = int(self.db.execute(total_stmt).scalar_one() or 0)
+
+        rows = self.db.execute(
+            select(FunctionalRoleModel)
+            .where(and_(*filters))
+            .order_by(FunctionalRoleModel.sort_order.asc(), FunctionalRoleModel.created_at.asc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).scalars()
+
+        items = [
+            {
+                "id": item.id,
+                "orgId": item.org_id,
+                "code": item.code,
+                "name": item.name,
+                "description": item.description,
+                "isActive": item.is_active,
+                "sortOrder": item.sort_order,
+                "createdAt": item.created_at.isoformat() if item.created_at else "",
+                "updatedAt": item.updated_at.isoformat() if item.updated_at else "",
+            }
+            for item in rows
+        ]
+        return total, items
 
     def create_auth_session(
         self,
