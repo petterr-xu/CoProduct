@@ -7,14 +7,14 @@ import { ReactNode, useMemo, useState } from 'react';
 
 import { authClient } from '@/lib/auth-client';
 import { cn } from '@/lib/utils';
-import { isWriteRole, useAuthStore } from '@/stores/auth-store';
+import { isAdminRole, isWriteRole, useAuthStore } from '@/stores/auth-store';
 
 type AppShellProps = {
   children: ReactNode;
 };
 
 type NavItem = {
-  href: Route;
+  href: string;
   label: string;
   isActive: (pathname: string) => boolean;
 };
@@ -47,6 +47,13 @@ export function AppShell({ children }: AppShellProps) {
         isActive: (name) => name.startsWith('/prereview')
       });
     }
+    if (isAdminRole(user?.role)) {
+      base.push({
+        href: '/admin/users',
+        label: '管理后台',
+        isActive: (name) => name.startsWith('/admin')
+      });
+    }
     return base;
   }, [user?.role]);
 
@@ -67,7 +74,7 @@ export function AppShell({ children }: AppShellProps) {
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={item.href as Route}
                   className={cn(
                     'rounded-md border px-3 py-1.5 text-sm transition',
                     active

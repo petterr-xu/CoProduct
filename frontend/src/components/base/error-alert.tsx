@@ -1,6 +1,8 @@
+import { ReactNode } from 'react';
+
 type Props = {
   title?: string;
-  message: string;
+  message: ReactNode;
 };
 
 export function ErrorAlert({ title = '请求失败', message }: Props) {
