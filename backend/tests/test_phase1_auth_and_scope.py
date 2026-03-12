@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import Settings
 from app.core.db import Base
+from app.core.security import api_key_prefix
 from app.core.user_context import CurrentUserContext
 from app.repositories import PreReviewRepository, UserRepository
 from app.services import AuthService, AuthServiceError, HistoryService
@@ -174,3 +175,54 @@ def test_history_scope_member_only_sees_own_records() -> None:
         assert member_view["total"] == 1
         assert member_view["items"][0]["requestText"] == "member request"
         assert owner_view["total"] == 2
+
+
+def test_bootstrap_api_key_is_reconciled_after_revoke() -> None:
+    settings = Settings(
+        jwt_secret="test-jwt-secret",
+        refresh_token_secret="test-refresh-secret",
+        csrf_secret="test-csrf-secret",
+        api_key_pepper="test-api-key-pepper",
+        bootstrap_owner_email="owner@test.local",
+        bootstrap_owner_display_name="Owner",
+        bootstrap_owner_api_key="cpk_test_bootstrap_owner_key_123456",
+        access_token_ttl_seconds=300,
+        refresh_token_ttl_seconds=3600,
+        default_org_id="org_test",
+    )
+    SessionLocal = _build_session_local()
+
+    with SessionLocal() as db:
+        user_repo = UserRepository(db)
+        auth = AuthService(settings=settings, repo=user_repo)
+        auth.ensure_bootstrap_identity()
+        db.commit()
+
+        keys = user_repo.find_api_keys_by_prefix(api_key_prefix(settings.bootstrap_owner_api_key))
+        assert keys
+        user_repo.revoke_api_key_and_sessions(key_id=keys[0].id, org_id=settings.default_org_id)
+        db.commit()
+
+        try:
+            auth.login_with_api_key(
+                api_key=settings.bootstrap_owner_api_key,
+                device_info="pytest",
+                ip="127.0.0.1",
+                user_agent="pytest",
+            )
+        except AuthServiceError as exc:
+            assert exc.error_code == "AUTH_ERROR"
+        else:
+            raise AssertionError("Expected login failure after bootstrap key revoke")
+
+        auth.ensure_bootstrap_identity()
+        db.commit()
+
+        restored_login = auth.login_with_api_key(
+            api_key=settings.bootstrap_owner_api_key,
+            device_info="pytest-retry",
+            ip="127.0.0.1",
+            user_agent="pytest",
+        )
+        db.commit()
+        assert restored_login.user.org_id == settings.default_org_id

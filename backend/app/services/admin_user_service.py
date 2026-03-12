@@ -563,6 +563,16 @@ class AdminUserService:
             target_membership=membership,
             target_id=api_key.user_id,
         )
+        if api_key.user_id == current_user.user_id:
+            self._raise_with_audit(
+                current_user=current_user,
+                action=action,
+                target_type="api_key",
+                target_id=key_id,
+                error_code="SELF_OPERATION_FORBIDDEN",
+                message="Cannot revoke your own API key",
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
 
         _, revoked_sessions = self.repo.revoke_api_key_and_sessions(key_id=key_id, org_id=current_user.org_id)
         self.repo.create_audit_log(

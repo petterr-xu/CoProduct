@@ -7,7 +7,7 @@ from app.core.config import Settings
 from app.core.db import Base
 from app.core.user_context import CurrentUserContext
 from app.repositories import UserRepository
-from app.services import AdminUserService, AuthService, AuthServiceError
+from app.services import AdminServiceError, AdminUserService, AuthService, AuthServiceError
 
 
 def _build_session_local():
@@ -169,3 +169,32 @@ def test_disable_user_revokes_all_sessions() -> None:
             assert exc.error_code in {"TOKEN_EXPIRED", "USER_DISABLED"}
         else:
             raise AssertionError("Expected disabled user session to be invalid")
+
+
+def test_revoke_api_key_for_self_is_forbidden() -> None:
+    settings = _build_settings()
+    SessionLocal = _build_session_local()
+
+    with SessionLocal() as db:
+        repo = UserRepository(db)
+        auth_service = AuthService(settings=settings, repo=repo)
+        auth_service.ensure_bootstrap_identity()
+        db.commit()
+
+        owner_ctx = _build_owner_context(repo, settings)
+        admin_service = AdminUserService(repo=repo, api_key_pepper=settings.api_key_pepper)
+
+        own_key = admin_service.issue_api_key(
+            current_user=owner_ctx,
+            user_id=owner_ctx.user_id,
+            name="owner-self-key",
+            expires_at=None,
+        )
+        db.commit()
+
+        try:
+            admin_service.revoke_api_key(current_user=owner_ctx, key_id=own_key.key_id)
+        except AdminServiceError as exc:
+            assert exc.error_code == "SELF_OPERATION_FORBIDDEN"
+        else:
+            raise AssertionError("Expected self revoke to be forbidden")

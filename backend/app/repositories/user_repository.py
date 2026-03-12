@@ -381,6 +381,18 @@ class UserRepository:
         api_key.last_used_at = utc_now()
         self.db.add(api_key)
 
+    def restore_api_key(self, key_id: str) -> ApiKeyModel | None:
+        """Restore a revoked/expired API key back to ACTIVE for break-glass bootstrap use."""
+        api_key = self.db.get(ApiKeyModel, key_id)
+        if api_key is None:
+            return None
+        api_key.status = "ACTIVE"
+        api_key.revoked_at = None
+        api_key.expires_at = None
+        self.db.add(api_key)
+        self.db.flush()
+        return api_key
+
     def list_api_keys(
         self,
         *,

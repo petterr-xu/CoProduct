@@ -70,37 +70,85 @@ class AuthService:
         self.repo = repo
 
     def ensure_bootstrap_identity(self) -> None:
-        """Create default org/owner/api key for first-time deployments."""
-        if self.repo.count_users() > 0:
+        """Ensure bootstrap owner and bootstrap API key are available for break-glass login."""
+        org = self.repo.get_or_create_organization(org_id=self.settings.default_org_id, name="Default Organization")
+        owner = self.repo.get_user_by_email(self.settings.bootstrap_owner_email)
+        owner_created = False
+        if owner is None:
+            owner = self.repo.create_user(
+                email=self.settings.bootstrap_owner_email,
+                display_name=self.settings.bootstrap_owner_display_name,
+                status="ACTIVE",
+            )
+            owner_created = True
+
+        membership = self.repo.get_membership(user_id=owner.id, org_id=org.id)
+        membership_created = False
+        if membership is None:
+            membership = self.repo.create_membership(user_id=owner.id, org_id=org.id, role="OWNER", status="ACTIVE")
+            membership_created = True
+
+        if owner_created or membership_created:
+            self.repo.create_audit_log(
+                org_id=org.id,
+                actor_user_id=owner.id,
+                target_type="user",
+                target_id=owner.id,
+                action="BOOTSTRAP_OWNER_CREATED",
+                result="SUCCESS",
+                metadata={"email": owner.email, "ownerCreated": owner_created, "membershipCreated": membership_created},
+            )
+
+        self._ensure_bootstrap_api_key(user_id=owner.id, org_id=org.id)
+
+    def _ensure_bootstrap_api_key(self, *, user_id: str, org_id: str) -> None:
+        raw_bootstrap_key = self.settings.bootstrap_owner_api_key
+        prefix = api_key_prefix(raw_bootstrap_key)
+        candidates = self.repo.find_api_keys_by_prefix(prefix)
+
+        for item in candidates:
+            if item.user_id != user_id or item.org_id != org_id:
+                continue
+            if not verify_api_key_hash(
+                raw_bootstrap_key,
+                salt=item.key_salt,
+                pepper=self.settings.api_key_pepper,
+                expected_hash=item.key_hash,
+            ):
+                continue
+            if item.status != "ACTIVE" or is_expired(item.expires_at):
+                restored = self.repo.restore_api_key(item.id)
+                if restored is not None:
+                    self.repo.create_audit_log(
+                        org_id=org_id,
+                        actor_user_id=user_id,
+                        target_type="api_key",
+                        target_id=restored.id,
+                        action="BOOTSTRAP_OWNER_KEY_RESTORED",
+                        result="SUCCESS",
+                        metadata={"reason": "bootstrap_key_reconcile"},
+                    )
             return
 
-        org = self.repo.get_or_create_organization(org_id=self.settings.default_org_id, name="Default Organization")
-        owner = self.repo.create_user(
-            email=self.settings.bootstrap_owner_email,
-            display_name=self.settings.bootstrap_owner_display_name,
-            status="ACTIVE",
-        )
-        self.repo.create_membership(user_id=owner.id, org_id=org.id, role="OWNER", status="ACTIVE")
-
         salt = api_key_salt()
-        key_hash = hash_api_key(self.settings.bootstrap_owner_api_key, salt=salt, pepper=self.settings.api_key_pepper)
-        self.repo.create_api_key(
-            user_id=owner.id,
-            org_id=org.id,
+        key_hash = hash_api_key(raw_bootstrap_key, salt=salt, pepper=self.settings.api_key_pepper)
+        created = self.repo.create_api_key(
+            user_id=user_id,
+            org_id=org_id,
             name="bootstrap-owner",
-            key_prefix=api_key_prefix(self.settings.bootstrap_owner_api_key),
+            key_prefix=prefix,
             key_hash=key_hash,
             key_salt=salt,
             expires_at=None,
         )
         self.repo.create_audit_log(
-            org_id=org.id,
-            actor_user_id=owner.id,
-            target_type="user",
-            target_id=owner.id,
-            action="BOOTSTRAP_OWNER_CREATED",
+            org_id=org_id,
+            actor_user_id=user_id,
+            target_type="api_key",
+            target_id=created.id,
+            action="BOOTSTRAP_OWNER_KEY_CREATED",
             result="SUCCESS",
-            metadata={"email": owner.email},
+            metadata={"reason": "bootstrap_key_reconcile"},
         )
 
     def login_with_api_key(
