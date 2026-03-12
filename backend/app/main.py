@@ -3,7 +3,15 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth_router, files_router, history_router, prereview_router
+from app.api import (
+    admin_api_keys_router,
+    admin_audit_logs_router,
+    admin_users_router,
+    auth_router,
+    files_router,
+    history_router,
+    prereview_router,
+)
 from app.core.config import get_settings, validate_security_settings
 from app.core.db import Base, SessionLocal, engine
 from app.core.logging import configure_logging
@@ -48,3 +56,6 @@ app.include_router(prereview_router, prefix=settings.api_prefix)
 app.include_router(history_router, prefix=settings.api_prefix)
 app.include_router(files_router, prefix=settings.api_prefix)
 app.include_router(auth_router, prefix=settings.api_prefix)
+app.include_router(admin_users_router, prefix=settings.api_prefix)
+app.include_router(admin_api_keys_router, prefix=settings.api_prefix)
+app.include_router(admin_audit_logs_router, prefix=settings.api_prefix)
