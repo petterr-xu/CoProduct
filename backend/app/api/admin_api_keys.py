@@ -29,6 +29,7 @@ def _to_http_error(exc: AdminServiceError) -> HTTPException:
 
 class IssueApiKeyRequest(BaseModel):
     userId: str = Field(min_length=1)
+    orgId: str | None = Field(default=None, min_length=1)
     name: str = Field(min_length=1, max_length=255)
     expiresAt: datetime | None = None
 
@@ -36,6 +37,7 @@ class IssueApiKeyRequest(BaseModel):
 @router.get("")
 def list_api_keys(
     userId: str | None = Query(default=None),
+    orgId: str | None = Query(default=None),
     status: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     pageSize: int = Query(default=20, ge=1, le=100),
@@ -48,6 +50,7 @@ def list_api_keys(
         return service.list_api_keys(
             current_user=current_user,
             user_id=userId,
+            org_id=orgId,
             key_status=status,
             page=page,
             page_size=pageSize,
@@ -68,6 +71,7 @@ def issue_api_key(
         result = service.issue_api_key(
             current_user=current_user,
             user_id=payload.userId,
+            org_id=payload.orgId,
             name=payload.name,
             expires_at=payload.expiresAt,
         )

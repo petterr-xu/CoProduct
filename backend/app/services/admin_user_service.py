@@ -112,6 +112,35 @@ class AdminUserService:
         )
         return ""
 
+    def _resolve_target_org_id(
+        self,
+        *,
+        current_user: CurrentUserContext,
+        action: str,
+        target_type: str,
+        target_id: str | None = None,
+        requested_org_id: str | None = None,
+    ) -> str:
+        active_org_id = self._require_active_org_context(
+            current_user=current_user,
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
+        )
+        target_org_id = (requested_org_id or active_org_id).strip()
+        if target_org_id != active_org_id:
+            self._raise_with_audit(
+                current_user=current_user,
+                action=action,
+                target_type="organization",
+                target_id=target_org_id or None,
+                error_code="PERMISSION_DENIED",
+                message="Cannot operate resources in another organization",
+                http_status=status.HTTP_403_FORBIDDEN,
+                metadata={"activeOrgId": active_org_id},
+            )
+        return target_org_id
+
     def _ensure_can_manage_target_membership(
         self,
         *,
@@ -501,34 +530,50 @@ class AdminUserService:
         user_id: str,
         name: str,
         expires_at: datetime | None,
+        org_id: str | None = None,
     ) -> IssueApiKeyResult:
         action = "ADMIN_ISSUE_API_KEY"
-        active_org_id = self._require_active_org_context(
+        target_org_id = self._resolve_target_org_id(
             current_user=current_user,
             action=action,
             target_type="api_key",
             target_id=user_id,
+            requested_org_id=org_id,
         )
         if not name.strip():
-            self._raise(
+            self._raise_with_audit(
+                current_user=current_user,
+                action=action,
+                target_type="api_key",
+                target_id=user_id,
                 error_code="VALIDATION_ERROR",
                 message="API key name is required",
                 http_status=status.HTTP_422_UNPROCESSABLE_CONTENT,
             )
 
-        membership = self.repo.get_membership(user_id=user_id, org_id=active_org_id)
+        membership = self.repo.get_active_membership(user_id=user_id, org_id=target_org_id)
         if membership is None:
-            self._raise(
+            self._raise_with_audit(
+                current_user=current_user,
+                action=action,
+                target_type="membership",
+                target_id=user_id,
                 error_code="RESOURCE_NOT_FOUND",
                 message="User membership not found",
                 http_status=status.HTTP_404_NOT_FOUND,
+                metadata={"targetOrgId": target_org_id},
             )
         user = self.repo.get_user(user_id)
-        if user is None:
-            self._raise(
+        if user is None or user.status != "ACTIVE":
+            self._raise_with_audit(
+                current_user=current_user,
+                action=action,
+                target_type="user",
+                target_id=user_id,
                 error_code="RESOURCE_NOT_FOUND",
                 message="User not found",
                 http_status=status.HTTP_404_NOT_FOUND,
+                metadata={"targetOrgId": target_org_id},
             )
         self._ensure_can_manage_target_membership(
             current_user=current_user,
@@ -544,7 +589,7 @@ class AdminUserService:
 
         key = self.repo.create_api_key(
             user_id=user_id,
-            org_id=active_org_id,
+            org_id=target_org_id,
             name=name.strip(),
             key_prefix=key_prefix,
             key_hash=key_hash,
@@ -552,13 +597,13 @@ class AdminUserService:
             expires_at=expires_at,
         )
         self.repo.create_audit_log(
-            org_id=active_org_id,
+            org_id=target_org_id,
             actor_user_id=current_user.user_id,
             target_type="api_key",
             target_id=key.id,
             action=action,
             result="SUCCESS",
-            metadata={"userId": user_id, "name": key.name},
+            metadata={"userId": user_id, "name": key.name, "orgId": target_org_id},
         )
         return IssueApiKeyResult(
             key_id=key.id,
@@ -567,11 +612,49 @@ class AdminUserService:
             expires_at=key.expires_at.isoformat() if key.expires_at else None,
         )
 
+    def list_member_options(
+        self,
+        *,
+        current_user: CurrentUserContext,
+        query: str,
+        org_id: str | None,
+        limit: int,
+    ) -> dict:
+        action = "ADMIN_LIST_MEMBER_OPTIONS"
+        normalized_query = query.strip()
+        if len(normalized_query) < 2:
+            self._raise(
+                error_code="VALIDATION_ERROR",
+                message="query must be at least 2 characters",
+                http_status=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            )
+        if limit < 1 or limit > 50:
+            self._raise(
+                error_code="VALIDATION_ERROR",
+                message="limit must be between 1 and 50",
+                http_status=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            )
+
+        target_org_id = self._resolve_target_org_id(
+            current_user=current_user,
+            action=action,
+            target_type="membership",
+            target_id=None,
+            requested_org_id=org_id,
+        )
+        items = self.repo.list_member_options(
+            org_id=target_org_id,
+            query_prefix=normalized_query,
+            limit=limit,
+        )
+        return {"items": items}
+
     def list_api_keys(
         self,
         *,
         current_user: CurrentUserContext,
         user_id: str | None,
+        org_id: str | None = None,
         key_status: str | None,
         page: int,
         page_size: int,
@@ -583,8 +666,14 @@ class AdminUserService:
                 http_status=status.HTTP_422_UNPROCESSABLE_CONTENT,
             )
 
+        target_org_id = self._resolve_target_org_id(
+            current_user=current_user,
+            action="ADMIN_LIST_API_KEYS",
+            target_type="api_key",
+            requested_org_id=org_id,
+        )
         total, items = self.repo.list_api_keys(
-            org_id=current_user.org_id,
+            org_id=target_org_id,
             user_id=user_id,
             status=key_status,
             page=page,

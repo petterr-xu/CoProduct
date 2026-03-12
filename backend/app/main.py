@@ -7,6 +7,7 @@ from app.api import (
     admin_api_keys_router,
     admin_audit_logs_router,
     admin_functional_roles_router,
+    admin_member_options_router,
     admin_members_router,
     admin_users_router,
     auth_router,
@@ -70,3 +71,4 @@ app.include_router(admin_api_keys_router, prefix=settings.api_prefix)
 app.include_router(admin_audit_logs_router, prefix=settings.api_prefix)
 app.include_router(admin_members_router, prefix=settings.api_prefix)
 app.include_router(admin_functional_roles_router, prefix=settings.api_prefix)
+app.include_router(admin_member_options_router, prefix=settings.api_prefix)
