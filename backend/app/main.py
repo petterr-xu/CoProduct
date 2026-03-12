@@ -3,12 +3,14 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import files_router, history_router, prereview_router
-from app.core.config import get_settings
+from app.api import auth_router, files_router, history_router, prereview_router
+from app.core.config import get_settings, validate_security_settings
 from app.core.db import Base, SessionLocal, engine
 from app.core.logging import configure_logging
 from app.model_client import build_model_client
+from app.repositories import UserRepository
 from app.rag import ensure_builtin_knowledge
+from app.services import AuthService
 
 settings = get_settings()
 configure_logging()
@@ -28,7 +30,12 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup() -> None:
+    validate_security_settings(settings)
     Base.metadata.create_all(bind=engine)
+    with SessionLocal() as db:
+        auth_service = AuthService(settings=settings, repo=UserRepository(db))
+        auth_service.ensure_bootstrap_identity()
+        db.commit()
     ensure_builtin_knowledge(SessionLocal, build_model_client(settings))
 
 
@@ -40,3 +47,4 @@ def healthz() -> dict:
 app.include_router(prereview_router, prefix=settings.api_prefix)
 app.include_router(history_router, prefix=settings.api_prefix)
 app.include_router(files_router, prefix=settings.api_prefix)
+app.include_router(auth_router, prefix=settings.api_prefix)

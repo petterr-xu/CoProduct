@@ -5,6 +5,7 @@ directly invoking repositories or workflow internals.
 """
 
 from app.services.attachment_service import AttachmentService
+from app.services.auth_service import AuthLoginResult, AuthRefreshResult, AuthService, AuthServiceError
 from app.services.file_service import FileService
 from app.services.history_service import HistoryService
 from app.services.persistence_service import PersistenceService
@@ -20,4 +21,8 @@ __all__ = [
     "PersistenceService",
     "HistoryService",
     "FileService",
+    "AuthService",
+    "AuthServiceError",
+    "AuthLoginResult",
+    "AuthRefreshResult",
 ]
