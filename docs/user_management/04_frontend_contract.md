@@ -1,0 +1,273 @@
+# 前端契约文档 - user_management
+> Version: v0.2.0
+> Last Updated: 2026-03-12
+> Status: Draft
+
+> Contract Priority (v0.2.0): 若旧段落与 `Obsolete in v0.2.0` 后的新规则冲突，以新规则为准。
+
+## 1. 请求模型（前端视角）
+
+### 1.1 认证接口请求
+
+1. `POST /api/auth/key-login`
+
+```ts
+type KeyLoginRequest = {
+  apiKey: string;
+  deviceInfo?: string;
+};
+```
+
+2. `POST /api/auth/refresh`
+
+```ts
+type RefreshTokenRequest = {
+  refreshToken: string;
+};
+```
+
+3. `POST /api/auth/logout`
+
+```ts
+type LogoutRequest = {
+  refreshToken?: string;
+  allDevices?: boolean;
+};
+```
+
+4. `GET /api/auth/me`
+
+- 无请求体。
+
+> Obsolete in v0.2.0: `RefreshTokenRequest` 与 `LogoutRequest.refreshToken` 的请求体 token 传输不再作为主路径。
+
+v0.2.0 生效规则：
+
+1. `POST /api/auth/refresh`：无请求体，使用 Cookie `refresh_token` + Header `X-CSRF-Token`。
+2. `POST /api/auth/logout`：请求体仅保留 `allDevices?: boolean`。
+
+```ts
+type RefreshRequest = Record<string, never>;
+
+type LogoutRequestV2 = {
+  allDevices?: boolean;
+};
+```
+
+### 1.2 管理接口请求（Phase 2）
+
+1. `POST /api/admin/users`
+
+```ts
+type CreateUserRequest = {
+  email: string;
+  displayName: string;
+  role: Role;
+  orgId?: string;
+};
+```
+
+2. `GET /api/admin/users`
+
+```ts
+type ListUsersQuery = {
+  query?: string;
+  role?: Role;
+  status?: UserStatus;
+  page?: number;
+  pageSize?: number;
+};
+```
+
+3. `PATCH /api/admin/users/{user_id}/status`
+
+```ts
+type UpdateUserStatusRequest = {
+  status: UserStatus;
+};
+```
+
+4. `PATCH /api/admin/users/{user_id}/role`
+
+```ts
+type UpdateUserRoleRequest = {
+  role: Role;
+};
+```
+
+5. `POST /api/admin/api-keys`
+
+```ts
+type IssueApiKeyRequest = {
+  userId: string;
+  name: string;
+  expiresAt?: string; // ISO 8601
+};
+```
+
+6. `GET /api/admin/api-keys`
+
+```ts
+type ListApiKeysQuery = {
+  userId?: string;
+  status?: ApiKeyStatus;
+  page?: number;
+  pageSize?: number;
+};
+```
+
+7. `POST /api/admin/api-keys/{key_id}/revoke`
+
+- 无请求体。
+
+### 1.3 请求头与 Cookie 约定（v0.2.0）
+
+1. 业务与管理接口：
+- Header: `Authorization: Bearer <accessToken>`。
+2. 刷新与登出：
+- Cookie: `refresh_token`（HttpOnly）与 `csrf_token`（非 HttpOnly）。
+- Header: `X-CSRF-Token: <csrf_token>`。
+3. 所有列表接口统一 query：
+- `page`（默认 1）, `pageSize`（默认 20，最大 100）。
+
+## 2. 响应模型（前端视图模型）
+
+### 2.1 认证响应
+
+```ts
+type AuthUserView = {
+  id: string;
+  email: string;
+  displayName: string;
+  role: Role;
+  orgId: string;
+  status: UserStatus;
+};
+
+type AuthTokenResponse = {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: 'Bearer';
+  expiresIn: number;
+  user: AuthUserView;
+};
+```
+
+> Obsolete in v0.2.0: `AuthTokenResponse.refreshToken` 不再保留。
+
+```ts
+type AuthTokenResponseV2 = {
+  accessToken: string;
+  tokenType: 'Bearer';
+  expiresIn: number;
+  user: AuthUserView;
+};
+
+type RefreshResponse = {
+  accessToken: string;
+  tokenType: 'Bearer';
+  expiresIn: number;
+};
+
+type LogoutResponse = {
+  success: true;
+};
+```
+
+### 2.2 管理响应（Phase 2）
+
+```ts
+type UserListItem = {
+  id: string;
+  email: string;
+  displayName: string;
+  role: Role;
+  status: UserStatus;
+  orgId: string;
+  createdAt: string;
+  lastLoginAt: string | null;
+};
+
+type IssueApiKeyResponse = {
+  keyId: string;
+  keyPrefix: string;
+  plainTextKey: string; // 仅本次返回
+  expiresAt: string | null;
+};
+```
+
+```ts
+type ListResponse<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+type ApiKeyListItem = {
+  keyId: string;
+  userId: string;
+  keyPrefix: string;
+  status: ApiKeyStatus;
+  name: string;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+};
+
+type ListUsersResponse = ListResponse<UserListItem>;
+type ListApiKeysResponse = ListResponse<ApiKeyListItem>;
+
+type OperationSuccessResponse = {
+  success: true;
+};
+```
+
+### 2.3 既有业务接口影响
+
+1. `prereview/history/files` 的请求与响应主体不改。
+2. 唯一变化：请求头必须携带 `Authorization: Bearer <accessToken>`。
+3. 业务详情响应允许新增可选字段：`createdByUserId`, `orgId`（前端可忽略但需容错）。
+
+## 3. 状态与枚举映射
+
+### 3.1 枚举定义
+
+```ts
+type Role = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
+type UserStatus = 'ACTIVE' | 'DISABLED' | 'PENDING_INVITE';
+type ApiKeyStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED';
+```
+
+### 3.2 UI 映射
+
+1. `Role`：用于权限门禁（按钮可见性与路由可访问性）。
+2. `UserStatus.DISABLED`：前端立即退出并提示联系管理员。
+3. `PENDING_INVITE`：只允许访问激活流程（Phase 3）。
+
+### 3.3 数据可见性映射（v0.2.0）
+
+1. `OWNER/ADMIN`：历史与详情可见组织内全部数据。
+2. `MEMBER`：历史与详情仅可见本人创建数据。
+3. `VIEWER`：仅可读，不可触发创建/再生成/上传。
+
+## 4. 错误码到 UI 行为映射
+
+| 错误码 | HTTP | 前端行为 |
+|---|---:|---|
+| `AUTH_ERROR` | 401 | 登录失败提示“密钥无效或格式错误” |
+| `TOKEN_EXPIRED` | 401 | 自动 refresh，失败则跳转登录 |
+| `PERMISSION_DENIED` | 403 | 展示无权限提示页 |
+| `USER_DISABLED` | 403 | 清理登录态并弹出禁用提示 |
+| `API_KEY_REVOKED` | 401 | 提示“密钥已吊销”，返回登录页 |
+| `RATE_LIMITED` | 429 | 显示节流提示，延迟重试 |
+| `VALIDATION_ERROR` | 400/422 | 表单字段级错误提示 |
+| `RESOURCE_NOT_FOUND` | 404 | 提示资源不存在并回退列表页 |
+| `PERSISTENCE_ERROR` | 500 | 展示系统错误并允许重试 |
+
+## 5. 与后端契约对齐说明
+
+1. 路由与方法对齐：以 `05_backend_contract.md` 为唯一后端事实来源。
+2. 枚举值大小写必须完全一致：`OWNER/ADMIN/MEMBER/VIEWER` 等。
+3. token 响应字段命名采用驼峰（后端同步返回驼峰字段）。
+4. 前端对新增字段默认“向后兼容”：未知字段忽略，缺失字段采用安全默认。
