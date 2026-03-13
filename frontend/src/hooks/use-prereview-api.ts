@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { apiClient, isApiClientError } from '@/lib/api-client';
@@ -13,7 +14,9 @@ export function useCreatePrereview() {
 }
 
 export function usePrereviewDetail(sessionId: string) {
-  return useQuery({
+  const processingSinceRef = useRef<number | null>(null);
+
+  const query = useQuery({
     queryKey: QUERY_KEYS.prereviewDetail(sessionId),
     queryFn: () => apiClient.getPrereviewDetail(sessionId),
     retry: (failureCount, error) => {
@@ -22,12 +25,27 @@ export function usePrereviewDetail(sessionId: string) {
       }
       return failureCount < 2;
     },
-    refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      return status === 'PROCESSING' ? 2000 : false;
+    refetchInterval: () => {
+      const since = processingSinceRef.current;
+      if (since === null) return false;
+      const elapsed = Date.now() - since;
+      return elapsed < 60_000 ? 2_000 : 5_000;
     },
     enabled: Boolean(sessionId)
   });
+
+  useEffect(() => {
+    const status = query.data?.status;
+    if (status === 'PROCESSING') {
+      if (processingSinceRef.current === null) {
+        processingSinceRef.current = Date.now();
+      }
+      return;
+    }
+    processingSinceRef.current = null;
+  }, [query.data?.status]);
+
+  return query;
 }
 
 export function useRegeneratePrereview(sessionId: string) {

@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { EmptyState } from '@/components/base/empty-state';
@@ -25,6 +26,8 @@ type Props = {
   sessionId: string;
 };
 
+type RegenerateSubmissionPhase = 'IDLE' | 'SUBMITTING' | 'ACCEPTED';
+
 export function ReviewDetailLayout({ sessionId }: Props) {
   const router = useRouter();
   const detailQuery = usePrereviewDetail(sessionId);
@@ -32,6 +35,9 @@ export function ReviewDetailLayout({ sessionId }: Props) {
   const role = useAuthStore((state) => state.user?.role);
   const canWrite = isWriteRole(role);
   const canUseDebugOptions = isAdminRole(role);
+  const [regeneratePhase, setRegeneratePhase] = useState<RegenerateSubmissionPhase>('IDLE');
+  const [regenerateHint, setRegenerateHint] = useState<string | null>(null);
+  const isRegenerateSubmitting = regenerateMutation.isPending || regeneratePhase !== 'IDLE';
 
   if (detailQuery.isLoading) {
     return <LoadingSkeleton />;
@@ -83,14 +89,31 @@ export function ReviewDetailLayout({ sessionId }: Props) {
       </div>
 
       <RegeneratePanel
-        disabled={!canWrite}
+        disabled={!canWrite || isRegenerateSubmitting}
         showDebugOptions={canUseDebugOptions}
-        loading={regenerateMutation.isPending}
+        loading={isRegenerateSubmitting}
         onSubmit={async ({ additionalContext, attachments, debugOptions }) => {
-          const result = await regenerateMutation.mutateAsync({ additionalContext, attachments, debugOptions });
-          router.push(`/prereview/${result.sessionId}`);
+          if (regeneratePhase === 'ACCEPTED') {
+            setRegenerateHint('任务已受理，请在详情页查看进度。');
+            return;
+          }
+          if (regenerateMutation.isPending) return;
+
+          setRegenerateHint(null);
+          setRegeneratePhase('SUBMITTING');
+          try {
+            const result = await regenerateMutation.mutateAsync({ additionalContext, attachments, debugOptions });
+            setRegeneratePhase('ACCEPTED');
+            setRegenerateHint('任务已受理，正在跳转新版本详情并进入轮询。');
+            router.push(`/prereview/${result.sessionId}`);
+          } catch {
+            setRegeneratePhase('IDLE');
+          }
         }}
       />
+      {regenerateHint ? (
+        <section className='rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-info'>{regenerateHint}</section>
+      ) : null}
       {regenerateMutation.error ? <ErrorAlert title='重新生成失败' message={getApiErrorMessage(regenerateMutation.error)} /> : null}
     </div>
   );

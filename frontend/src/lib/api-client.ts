@@ -55,6 +55,8 @@ export function isApiClientError(error: unknown): error is ApiClientError {
 
 export function getApiErrorMessage(error: unknown, fallback = '请求失败，请稍后重试') {
   if (isApiClientError(error)) {
+    if (error.code === 'SUBMISSION_TIMEOUT') return '任务受理超时，请稍后重试。';
+    if (error.code === 'SUBMISSION_QUEUE_FULL') return '系统繁忙，任务队列已满，请稍后重试。';
     if (error.code === 'FILE_UPLOAD_ERROR') return '文件上传失败，请检查文件类型和大小限制。';
     if (error.code === 'FILE_PARSE_ERROR') return '文件解析失败，可删除后重传，或忽略该附件继续。';
     if (error.code === 'WORKFLOW_ERROR') return '预审流程执行失败，请稍后重试。';
