@@ -2,22 +2,29 @@
 
 import { useState } from 'react';
 
+import { DebugOptions } from '@/components/business/debug-options';
 import { ErrorAlert } from '@/components/base/error-alert';
 import { FileUploader } from '@/components/base/file-uploader';
 import { SubmitButton } from '@/components/base/submit-button';
 import { regenerateSchema } from '@/schemas/regenerate';
-import { UploadedFileRef } from '@/types';
+import { PreReviewDebugOptions, UploadedFileRef } from '@/types';
 
 type Props = {
-  onSubmit: (payload: { additionalContext: string; attachments: UploadedFileRef[] }) => Promise<void>;
+  onSubmit: (payload: {
+    additionalContext: string;
+    attachments: UploadedFileRef[];
+    debugOptions?: PreReviewDebugOptions;
+  }) => Promise<void>;
   loading?: boolean;
   disabled?: boolean;
+  showDebugOptions?: boolean;
 };
 
-export function RegeneratePanel({ onSubmit, loading, disabled = false }: Props) {
+export function RegeneratePanel({ onSubmit, loading, disabled = false, showDebugOptions = false }: Props) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<UploadedFileRef[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [debugOptions, setDebugOptions] = useState<PreReviewDebugOptions | undefined>(undefined);
 
   const validate = (value: string, files: UploadedFileRef[]) => {
     const parsed = regenerateSchema.safeParse({
@@ -59,6 +66,12 @@ export function RegeneratePanel({ onSubmit, loading, disabled = false }: Props) 
         />
       </div>
 
+      {showDebugOptions ? (
+        <div className='mt-3'>
+          <DebugOptions value={debugOptions} disabled={disabled || loading} onChange={setDebugOptions} />
+        </div>
+      ) : null}
+
       <div className='mt-3'>
         {disabled ? <ErrorAlert title='当前账号只读' message='VIEWER 角色不可触发重新生成。' /> : null}
         <SubmitButton
@@ -73,7 +86,7 @@ export function RegeneratePanel({ onSubmit, loading, disabled = false }: Props) 
               return;
             }
             setErrorMessage(null);
-            await onSubmit({ additionalContext: text.trim(), attachments });
+            await onSubmit({ additionalContext: text.trim(), attachments, debugOptions: showDebugOptions ? debugOptions : undefined });
           }}
         >
           重新生成

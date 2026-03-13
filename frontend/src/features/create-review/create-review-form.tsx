@@ -2,16 +2,18 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
+import { DebugOptions } from '@/components/business/debug-options';
 import { ErrorAlert } from '@/components/base/error-alert';
 import { FileUploader } from '@/components/base/file-uploader';
 import { SubmitButton } from '@/components/base/submit-button';
 import { useCreatePrereview } from '@/hooks/use-prereview-api';
 import { getApiErrorMessage } from '@/lib/api-client';
 import { createReviewSchema, CreateReviewSchema } from '@/schemas/create-review';
-import { isWriteRole, useAuthStore } from '@/stores/auth-store';
+import { isAdminRole, isWriteRole, useAuthStore } from '@/stores/auth-store';
+import { PreReviewDebugOptions } from '@/types';
 import { useCreateReviewDraftStore } from '@/stores/create-review-draft';
 
 const DRAFT_KEY = 'coproduct:create-review:draft';
@@ -25,6 +27,8 @@ export function CreateReviewForm() {
   const draftStore = useCreateReviewDraftStore();
   const role = useAuthStore((state) => state.user?.role);
   const canWrite = isWriteRole(role);
+  const canUseDebugOptions = isAdminRole(role);
+  const [debugOptions, setDebugOptions] = useState<PreReviewDebugOptions | undefined>(undefined);
 
   const defaults = useMemo(
     () => ({
@@ -85,7 +89,8 @@ export function CreateReviewForm() {
       backgroundText: values.backgroundText,
       businessDomain: values.businessDomain,
       moduleHint: values.moduleHint,
-      attachments: values.attachments
+      attachments: values.attachments,
+      debugOptions: canUseDebugOptions ? debugOptions : undefined
     });
     router.push(`/prereview/${result.sessionId}`);
   });
@@ -141,6 +146,10 @@ export function CreateReviewForm() {
         <label className='text-sm font-medium'>附件</label>
         <FileUploader files={attachments} onChange={(files) => setValue('attachments', files)} disabled={!canWrite} />
       </div>
+
+      {canUseDebugOptions ? (
+        <DebugOptions value={debugOptions} disabled={!canWrite || mutation.isPending} onChange={setDebugOptions} />
+      ) : null}
 
       <div className='flex flex-wrap items-center gap-2'>
         <SubmitButton loading={mutation.isPending} disabled={!canWrite}>
