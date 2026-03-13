@@ -60,6 +60,38 @@ class SessionModel(Base):
     )
 
 
+class WorkflowJobModel(Base):
+    __tablename__ = "workflow_jobs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("job"))
+    session_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    task_type: Mapped[str] = mapped_column(String(32), nullable=False, default="CREATE")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="QUEUED", index=True)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    org_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("organizations.id"), nullable=True, index=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+
 class ReportModel(Base):
     __tablename__ = "reports"
 

@@ -22,7 +22,8 @@ from app.core.schema_compat import backfill_default_functional_roles, ensure_run
 from app.model_client import build_model_client
 from app.repositories import UserRepository
 from app.rag import ensure_builtin_knowledge
-from app.services import AuthService
+from app.services import AuthService, WorkflowRunner
+from app.workflow import PreReviewWorkflow
 
 settings = get_settings()
 configure_logging()
@@ -41,7 +42,7 @@ app.add_middleware(
 
 
 @app.on_event("startup")
-def startup() -> None:
+async def startup() -> None:
     validate_security_settings(settings)
     Base.metadata.create_all(bind=engine)
     applied_upgrades = ensure_runtime_schema_compatibility(engine)
@@ -55,6 +56,19 @@ def startup() -> None:
             log_event("functional_role_backfilled", rows=backfilled_rows)
         db.commit()
     ensure_builtin_knowledge(SessionLocal, build_model_client(settings))
+    app.state.workflow_runner = WorkflowRunner(
+        settings=settings,
+        session_factory=SessionLocal,
+        workflow=PreReviewWorkflow(settings),
+    )
+    await app.state.workflow_runner.start()
+
+
+@app.on_event("shutdown")
+async def shutdown() -> None:
+    runner = getattr(app.state, "workflow_runner", None)
+    if runner is not None:
+        await runner.stop()
 
 
 @app.get("/healthz")

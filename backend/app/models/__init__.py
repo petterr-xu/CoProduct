@@ -8,6 +8,7 @@ from app.models.prereview import (
     RequestModel,
     SessionModel,
     UploadedFileModel,
+    WorkflowJobModel,
 )
 from app.models.user_management import (
     ApiKeyModel,
@@ -27,6 +28,7 @@ __all__ = [
     "UploadedFileModel",
     "KnowledgeDocumentModel",
     "KnowledgeChunkModel",
+    "WorkflowJobModel",
     "OrganizationModel",
     "UserModel",
     "MembershipModel",

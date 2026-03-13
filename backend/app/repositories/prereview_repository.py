@@ -7,7 +7,14 @@ from sqlalchemy import Select, and_, desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.user_context import CurrentUserContext
-from app.models import EvidenceItemModel, ReportModel, RequestModel, SessionModel, UploadedFileModel
+from app.models import (
+    EvidenceItemModel,
+    ReportModel,
+    RequestModel,
+    SessionModel,
+    UploadedFileModel,
+    WorkflowJobModel,
+)
 
 
 def utc_now() -> datetime:
@@ -102,8 +109,100 @@ class PreReviewRepository:
             return
         session.status = status
         session.error_message = error_message
-        session.finished_at = utc_now()
+        session.finished_at = utc_now() if status in {"DONE", "FAILED"} else None
         self.db.add(session)
+
+    def upsert_workflow_job(
+        self,
+        *,
+        session_id: str,
+        task_type: str,
+        payload: dict,
+        status: str = "QUEUED",
+        org_id: str | None = None,
+        created_by_user_id: str | None = None,
+    ) -> WorkflowJobModel:
+        stmt: Select[tuple[WorkflowJobModel]] = (
+            select(WorkflowJobModel).where(WorkflowJobModel.session_id == session_id).limit(1)
+        )
+        existing = self.db.execute(stmt).scalar_one_or_none()
+        payload_json = json.dumps(payload, ensure_ascii=False)
+        if existing is None:
+            existing = WorkflowJobModel(
+                session_id=session_id,
+                task_type=task_type,
+                status=status,
+                payload_json=payload_json,
+                attempt_count=0,
+                last_error=None,
+                org_id=org_id,
+                created_by_user_id=created_by_user_id,
+            )
+        else:
+            existing.task_type = task_type
+            existing.status = status
+            existing.payload_json = payload_json
+            existing.last_error = None
+
+        self.db.add(existing)
+        self.db.flush()
+        return existing
+
+    def get_workflow_job_by_session(self, session_id: str) -> WorkflowJobModel | None:
+        stmt: Select[tuple[WorkflowJobModel]] = (
+            select(WorkflowJobModel).where(WorkflowJobModel.session_id == session_id).limit(1)
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def list_recoverable_workflow_jobs(self, *, limit: int) -> list[WorkflowJobModel]:
+        stmt: Select[tuple[WorkflowJobModel]] = (
+            select(WorkflowJobModel)
+            .where(WorkflowJobModel.status.in_(("QUEUED", "RUNNING")))
+            .order_by(WorkflowJobModel.created_at.asc())
+            .limit(limit)
+        )
+        return list(self.db.execute(stmt).scalars().all())
+
+    def mark_workflow_job_running(self, session_id: str) -> WorkflowJobModel | None:
+        item = self.get_workflow_job_by_session(session_id)
+        if item is None:
+            return None
+        item.status = "RUNNING"
+        item.attempt_count += 1
+        item.last_error = None
+        self.db.add(item)
+        self.db.flush()
+        return item
+
+    def mark_workflow_job_queued(self, session_id: str, *, error_message: str | None = None) -> WorkflowJobModel | None:
+        item = self.get_workflow_job_by_session(session_id)
+        if item is None:
+            return None
+        item.status = "QUEUED"
+        item.last_error = error_message
+        self.db.add(item)
+        self.db.flush()
+        return item
+
+    def mark_workflow_job_done(self, session_id: str) -> WorkflowJobModel | None:
+        item = self.get_workflow_job_by_session(session_id)
+        if item is None:
+            return None
+        item.status = "DONE"
+        item.last_error = None
+        self.db.add(item)
+        self.db.flush()
+        return item
+
+    def mark_workflow_job_failed(self, session_id: str, *, error_message: str | None = None) -> WorkflowJobModel | None:
+        item = self.get_workflow_job_by_session(session_id)
+        if item is None:
+            return None
+        item.status = "FAILED"
+        item.last_error = error_message
+        self.db.add(item)
+        self.db.flush()
+        return item
 
     def upsert_report(
         self,
