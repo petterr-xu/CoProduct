@@ -7,6 +7,7 @@ API handlers should call this service instead of touching workflow/repo directly
 """
 
 from dataclasses import dataclass, field
+from uuid import uuid4
 
 from app.core.config import Settings
 from app.core.logging import log_event
@@ -15,6 +16,7 @@ from app.repositories import PreReviewRepository
 from app.services.attachment_service import AttachmentService
 from app.services.persistence_service import PersistenceService
 from app.services.session_service import SessionService
+from app.services.workflow_runner import WorkflowTaskEnvelope
 from app.workflow import PreReviewState, PreReviewWorkflow
 
 
@@ -40,6 +42,18 @@ class PreReviewRegenerateInput:
     current_user: CurrentUserContext | None = None
 
 
+@dataclass
+class PreReviewSubmission:
+    """Submission result returned before async queue acceptance."""
+
+    session_id: str
+    status: str
+    task: WorkflowTaskEnvelope
+
+    def to_response(self) -> dict:
+        return {"sessionId": self.session_id, "status": self.status}
+
+
 class PreReviewService:
     """Application service for create/query/regenerate pre-review flows."""
 
@@ -49,10 +63,11 @@ class PreReviewService:
         self.session_service = SessionService(repo)
         self.persistence_service = PersistenceService(repo)
         self.attachment_service = AttachmentService(settings=settings, repo=repo)
+        # Keep workflow injection for compatibility with existing callers/tests.
         self.workflow = workflow or PreReviewWorkflow(settings)
 
-    def create_prereview(self, payload: PreReviewCreateInput) -> dict:
-        """Create request/session, execute workflow, and persist outputs."""
+    def create_prereview(self, payload: PreReviewCreateInput) -> PreReviewSubmission:
+        """Create request/session and build async workflow task."""
         request = self.repo.create_request(
             requirement_text=payload.requirement_text,
             background_text=payload.background_text,
@@ -94,30 +109,28 @@ class PreReviewService:
             "error_message": None,
         }
 
-        try:
-            final_state = self.workflow.invoke(initial_state)
-            self.persistence_service.persist_workflow_result(final_state)
-            log_event(
-                "workflow_completed",
-                request_id=request.id,
-                session_id=session_id,
-                status=final_state.get("status", "DONE"),
-            )
-            return {"sessionId": session_id, "status": "PROCESSING"}
-        except Exception as exc:  # noqa: BLE001
-            self.persistence_service.persist_workflow_failure(session_id, str(exc))
-            log_event(
-                "workflow_failed",
-                request_id=request.id,
-                session_id=session_id,
-                status="FAILED",
-                error_code="WORKFLOW_ERROR",
-                error_message=str(exc),
-            )
-            raise
+        task = self._build_task(
+            task_type="CREATE",
+            session_id=session_id,
+            request_id=request.id,
+            parent_session_id=None,
+            version=version,
+            current_user=payload.current_user,
+            initial_state=initial_state,
+        )
+        self.repo.upsert_workflow_job(
+            session_id=session_id,
+            task_type=task.task_type,
+            payload=task.to_payload(),
+            status="QUEUED",
+            org_id=payload.current_user.org_id if payload.current_user else None,
+            created_by_user_id=payload.current_user.user_id if payload.current_user else None,
+        )
+        log_event("workflow_submission_accepted", request_id=request.id, session_id=session_id, status="PROCESSING")
+        return PreReviewSubmission(session_id=session_id, status="PROCESSING", task=task)
 
-    def regenerate_prereview(self, payload: PreReviewRegenerateInput) -> dict:
-        """Create a child session from parent session and rerun the full workflow."""
+    def regenerate_prereview(self, payload: PreReviewRegenerateInput) -> PreReviewSubmission:
+        """Create child session and build async workflow task."""
         parent_session = self.repo.get_session(payload.parent_session_id, scope=payload.current_user)
         if parent_session is None:
             raise ValueError("parent session not found")
@@ -163,29 +176,31 @@ class PreReviewService:
             "error_message": None,
         }
 
-        try:
-            final_state = self.workflow.invoke(initial_state)
-            self.persistence_service.persist_workflow_result(final_state)
-            log_event(
-                "workflow_regenerated",
-                request_id=request.id,
-                session_id=session_id,
-                parent_session_id=parent_session.id,
-                status=final_state.get("status", "DONE"),
-            )
-            return {"sessionId": session_id, "status": "PROCESSING"}
-        except Exception as exc:  # noqa: BLE001
-            self.persistence_service.persist_workflow_failure(session_id, str(exc))
-            log_event(
-                "workflow_regenerate_failed",
-                request_id=request.id,
-                session_id=session_id,
-                parent_session_id=parent_session.id,
-                status="FAILED",
-                error_code="WORKFLOW_ERROR",
-                error_message=str(exc),
-            )
-            raise
+        task = self._build_task(
+            task_type="REGENERATE",
+            session_id=session_id,
+            request_id=request.id,
+            parent_session_id=parent_session.id,
+            version=version,
+            current_user=payload.current_user,
+            initial_state=initial_state,
+        )
+        self.repo.upsert_workflow_job(
+            session_id=session_id,
+            task_type=task.task_type,
+            payload=task.to_payload(),
+            status="QUEUED",
+            org_id=payload.current_user.org_id if payload.current_user else None,
+            created_by_user_id=payload.current_user.user_id if payload.current_user else None,
+        )
+        log_event(
+            "workflow_regenerate_submission_accepted",
+            request_id=request.id,
+            session_id=session_id,
+            parent_session_id=parent_session.id,
+            status="PROCESSING",
+        )
+        return PreReviewSubmission(session_id=session_id, status="PROCESSING", task=task)
 
     def get_prereview(self, session_id: str, current_user: CurrentUserContext | None = None) -> dict | None:
         """Return frontend-facing view model for a session."""
@@ -211,3 +226,26 @@ class PreReviewService:
             "additional_context": additional_context,
             "attachment_text": attachment_text,
         }
+
+    @staticmethod
+    def _build_task(
+        *,
+        task_type: str,
+        session_id: str,
+        request_id: str,
+        parent_session_id: str | None,
+        version: int,
+        current_user: CurrentUserContext | None,
+        initial_state: PreReviewState,
+    ) -> WorkflowTaskEnvelope:
+        return WorkflowTaskEnvelope(
+            task_type=task_type,
+            session_id=session_id,
+            request_id=request_id,
+            parent_session_id=parent_session_id,
+            version=version,
+            org_id=current_user.org_id if current_user else None,
+            actor_user_id=current_user.user_id if current_user else None,
+            trace_id=f"trace_{uuid4().hex[:12]}",
+            initial_state=initial_state,
+        )

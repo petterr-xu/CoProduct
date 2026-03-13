@@ -10,12 +10,26 @@ from app.services.auth_service import AuthLoginResult, AuthRefreshResult, AuthSe
 from app.services.file_service import FileService
 from app.services.history_service import HistoryService
 from app.services.persistence_service import PersistenceService
-from app.services.prereview_service import PreReviewCreateInput, PreReviewRegenerateInput, PreReviewService
+from app.services.prereview_service import (
+    PreReviewCreateInput,
+    PreReviewRegenerateInput,
+    PreReviewService,
+    PreReviewSubmission,
+)
 from app.services.session_service import SessionService
+from app.services.workflow_runner import (
+    RunnerNotReadyError,
+    SubmissionQueueFullError,
+    SubmissionRejectedError,
+    SubmissionTimeoutError,
+    WorkflowRunner,
+    WorkflowTaskEnvelope,
+)
 
 __all__ = [
     "PreReviewCreateInput",
     "PreReviewRegenerateInput",
+    "PreReviewSubmission",
     "PreReviewService",
     "AttachmentService",
     "SessionService",
@@ -29,4 +43,10 @@ __all__ = [
     "AdminUserService",
     "AdminServiceError",
     "IssueApiKeyResult",
+    "WorkflowTaskEnvelope",
+    "WorkflowRunner",
+    "SubmissionRejectedError",
+    "SubmissionQueueFullError",
+    "SubmissionTimeoutError",
+    "RunnerNotReadyError",
 ]
