@@ -8,7 +8,7 @@ from app.model_client.factory import build_model_client
 from app.model_client.heuristic import HeuristicModelClient
 from app.model_client.structured_output import invoke_with_validation
 from app.prompts import build_structured_prompt, load_prompt_template
-from app.schemas import MissingInfoListSchema
+from app.schemas import CapabilityJudgementSchema, MissingInfoListSchema
 
 
 class _SimpleSchema(BaseModel):
@@ -89,17 +89,20 @@ def test_structured_prompt_composer_includes_schema_contract_and_payload() -> No
         prompt_name="missing_info_analyzer",
         input_data={"merged_text": "need export capability", "parsed_requirement": {}},
         schema=MissingInfoListSchema,
+        output_language="zh-CN",
     )
     assert result.prompt_name == "missing_info_analyzer"
     assert result.schema_name == "MissingInfoListSchema"
     assert "JSON Schema" in result.prompt_text
+    assert "Language Contract" in result.prompt_text
+    assert "Simplified Chinese" in result.prompt_text
     assert "Input Payload (JSON)" in result.prompt_text
     assert len(result.prompt_hash) == 12
 
 
 def test_cloud_model_client_uses_prompt_template_file() -> None:
     provider = _StubProvider(
-        responses=['{"items":[{"type":"permission_boundary","question":"What is role boundary?","priority":"HIGH"}]}']
+        responses=['{"items":[{"type":"permission_boundary","question":"角色权限边界是什么？","priority":"HIGH"}]}']
     )
     client = CloudModelClient(provider=provider)
 
@@ -114,3 +117,45 @@ def test_cloud_model_client_uses_prompt_template_file() -> None:
     assert provider.last_prompt is not None
     assert "Node Template (missing_info_analyzer)" in provider.last_prompt
     assert "Hard Constraints" in provider.last_prompt
+
+
+def test_cloud_model_client_rejects_non_chinese_reason_when_language_enforced() -> None:
+    provider = _StubProvider(
+        responses=[
+            (
+                '{"status":"PARTIALLY_SUPPORTED","reason":"Need more data for this request.",'
+                '"confidence":"medium","evidence_refs":["chunk_1"]}'
+            )
+        ]
+    )
+    client = CloudModelClient(provider=provider, output_language="zh-CN", enforce_output_language_check=True)
+
+    try:
+        client.structured_invoke(
+            prompt_name="capability_judge",
+            input_data={"evidence_pack": [], "uncertain_points": ["权限边界"]},
+            schema=CapabilityJudgementSchema,
+        )
+    except RuntimeError as exc:
+        assert "MODEL_LANGUAGE_ERROR" in str(exc)
+    else:
+        raise AssertionError("Expected language enforcement to reject non-Chinese prose output")
+
+
+def test_cloud_model_client_allows_non_chinese_when_language_guard_disabled() -> None:
+    provider = _StubProvider(
+        responses=[
+            (
+                '{"status":"PARTIALLY_SUPPORTED","reason":"Need more data for this request.",'
+                '"confidence":"medium","evidence_refs":["chunk_1"]}'
+            )
+        ]
+    )
+    client = CloudModelClient(provider=provider, output_language="zh-CN", enforce_output_language_check=False)
+
+    payload = client.structured_invoke(
+        prompt_name="capability_judge",
+        input_data={"evidence_pack": [], "uncertain_points": ["权限边界"]},
+        schema=CapabilityJudgementSchema,
+    )
+    assert payload["reason"].startswith("Need more data")

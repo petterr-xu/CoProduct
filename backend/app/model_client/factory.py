@@ -24,6 +24,8 @@ def _build_model_client_cached(
     model_temperature: float,
     model_log_output_enabled: bool,
     model_log_output_max_chars: int,
+    model_output_language: str,
+    model_output_language_enforce: bool,
 ) -> ModelClient:
     if model_mode == "heuristic":
         return HeuristicModelClient()
@@ -49,6 +51,8 @@ def _build_model_client_cached(
         temperature=model_temperature,
         log_output_enabled=model_log_output_enabled,
         log_output_max_chars=model_log_output_max_chars,
+        output_language=model_output_language,
+        enforce_output_language_check=model_output_language_enforce,
     )
 
 
@@ -67,6 +71,8 @@ def build_model_client(_settings: Settings | None = None) -> ModelClient:
         model_temperature=settings.model_temperature,
         model_log_output_enabled=settings.model_log_output_enabled,
         model_log_output_max_chars=settings.model_log_output_max_chars,
+        model_output_language=settings.model_output_language,
+        model_output_language_enforce=settings.model_output_language_enforce,
     )
     log_event(
         "model_client_built",
