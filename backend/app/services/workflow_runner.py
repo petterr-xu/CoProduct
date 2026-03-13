@@ -357,6 +357,7 @@ class WorkflowRunner:
             "MODEL_SCHEMA_ERROR",
             "MODEL_PROVIDER_ERROR",
             "MODEL_TIMEOUT",
+            "MODEL_LANGUAGE_ERROR",
             "WORKFLOW_ERROR",
         }
         prefix, sep, rest = error_message.partition(":")
