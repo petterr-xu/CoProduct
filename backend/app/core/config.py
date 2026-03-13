@@ -56,6 +56,14 @@ class Settings(BaseSettings):
     model_structured_retries: int = 1
     model_temperature: float = 0.0
 
+    # Phase 1.5 async workflow submission runtime.
+    workflow_queue_maxsize: int = 128
+    workflow_worker_count: int = 1
+    workflow_enqueue_timeout_seconds: float = 0.5
+    workflow_task_timeout_seconds: float = 180.0
+    workflow_max_retries: int = 0
+    workflow_recover_limit: int = 200
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
