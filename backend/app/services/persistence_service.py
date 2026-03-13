@@ -127,6 +127,7 @@ class PersistenceService:
             "MODEL_SCHEMA_ERROR",
             "MODEL_PROVIDER_ERROR",
             "MODEL_TIMEOUT",
+            "MODEL_LANGUAGE_ERROR",
             "SUBMISSION_TIMEOUT",
             "SUBMISSION_QUEUE_FULL",
         }

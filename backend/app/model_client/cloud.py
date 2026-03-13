@@ -6,6 +6,7 @@ from typing import Any
 
 from app.core.logging import log_event
 from app.model_client.heuristic import HeuristicModelClient
+from app.model_client.language_guard import enforce_output_language
 from app.model_client.providers.base import ChatProvider
 from app.model_client.structured_output import invoke_with_validation
 from app.prompts import build_structured_prompt
@@ -22,6 +23,8 @@ class CloudModelClient:
         temperature: float = 0.0,
         log_output_enabled: bool = True,
         log_output_max_chars: int = 4000,
+        output_language: str = "zh-CN",
+        enforce_output_language_check: bool = True,
         embedding_fallback: HeuristicModelClient | None = None,
     ) -> None:
         self.provider = provider
@@ -29,11 +32,18 @@ class CloudModelClient:
         self.temperature = temperature
         self.log_output_enabled = log_output_enabled
         self.log_output_max_chars = max(200, log_output_max_chars)
+        self.output_language = output_language
+        self.enforce_output_language_check = enforce_output_language_check
         self.embedding_fallback = embedding_fallback or HeuristicModelClient()
 
     def structured_invoke(self, prompt_name: str, input_data: dict, schema: type) -> Any:
         start = time.perf_counter()
-        prompt_build = build_structured_prompt(prompt_name=prompt_name, input_data=input_data, schema=schema)
+        prompt_build = build_structured_prompt(
+            prompt_name=prompt_name,
+            input_data=input_data,
+            schema=schema,
+            output_language=self.output_language,
+        )
 
         attempt = invoke_with_validation(
             prompt_name=prompt_name,
@@ -43,6 +53,12 @@ class CloudModelClient:
             invoke_text=lambda effective_prompt: self.provider.invoke_text(
                 prompt=effective_prompt, temperature=self.temperature
             ),
+        )
+        enforce_output_language(
+            prompt_name=prompt_name,
+            payload=attempt.validated_payload,
+            output_language=self.output_language,
+            enforce=self.enforce_output_language_check,
         )
         latency_ms = int((time.perf_counter() - start) * 1000)
         log_fields: dict[str, Any] = {
