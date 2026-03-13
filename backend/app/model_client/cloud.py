@@ -4,45 +4,11 @@ import json
 import time
 from typing import Any
 
-from pydantic import BaseModel
-
 from app.core.logging import log_event
 from app.model_client.heuristic import HeuristicModelClient
 from app.model_client.providers.base import ChatProvider
 from app.model_client.structured_output import invoke_with_validation
-
-
-def _schema_hint(schema: type) -> str:
-    if schema is list:
-        return "Return a JSON array."
-    if schema is dict:
-        return "Return a JSON object."
-    if isinstance(schema, type) and issubclass(schema, BaseModel):
-        json_schema = json.dumps(schema.model_json_schema(), ensure_ascii=False)
-        return (
-            f"Return a JSON object matching `{schema.__name__}`.\n"
-            "Strict constraints:\n"
-            "- Keep exact field names from schema.\n"
-            "- Include every required field.\n"
-            "- Enum fields must use allowed values only.\n"
-            "- Do not add unknown fields.\n"
-            f"JSON Schema: {json_schema}"
-        )
-    return "Return valid JSON."
-
-
-def _build_structured_prompt(prompt_name: str, input_data: dict, schema: type) -> str:
-    return (
-        "You are a backend agent node. Produce structured output only.\n"
-        f"Node: {prompt_name}\n"
-        f"{_schema_hint(schema)}\n"
-        "Output rules:\n"
-        "- JSON only.\n"
-        "- No markdown.\n"
-        "- Do not invent unsupported enum values.\n"
-        "Input payload:\n"
-        f"{json.dumps(input_data, ensure_ascii=False)}"
-    )
+from app.prompts import build_structured_prompt
 
 
 class CloudModelClient:
@@ -63,13 +29,13 @@ class CloudModelClient:
 
     def structured_invoke(self, prompt_name: str, input_data: dict, schema: type) -> Any:
         start = time.perf_counter()
-        prompt = _build_structured_prompt(prompt_name, input_data, schema)
+        prompt_build = build_structured_prompt(prompt_name=prompt_name, input_data=input_data, schema=schema)
 
         attempt = invoke_with_validation(
             prompt_name=prompt_name,
             schema=schema,
             max_retries=self.max_structured_retries,
-            base_prompt=prompt,
+            base_prompt=prompt_build.prompt_text,
             invoke_text=lambda effective_prompt: self.provider.invoke_text(
                 prompt=effective_prompt, temperature=self.temperature
             ),
@@ -82,6 +48,8 @@ class CloudModelClient:
             token_input_estimate=len(json.dumps(input_data, ensure_ascii=False)),
             token_output_estimate=len(json.dumps(attempt.validated_payload, ensure_ascii=False)),
             provider="cloud",
+            prompt_hash=prompt_build.prompt_hash,
+            schema_name=prompt_build.schema_name,
         )
         return attempt.validated_payload
 
