@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     model_timeout_seconds: float = 30.0
     model_structured_retries: int = 1
     model_temperature: float = 0.0
+    model_log_output_enabled: bool = True
+    model_log_output_max_chars: int = 4000
 
     # Phase 1.5 async workflow submission runtime.
     workflow_queue_maxsize: int = 128
