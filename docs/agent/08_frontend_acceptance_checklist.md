@@ -1,6 +1,6 @@
 # 前端检查清单 - agent
 
-> Version: v0.2.0
+> Version: v0.2.1
 > Last Updated: 2026-03-13
 > Status: Draft
 
@@ -11,6 +11,11 @@
 3. 管理页可查看 runtime 信息并触发 reindex。
 4. reindex 提交后有明确状态反馈。
 5. 预审详情页可展示 `toolTrace`，未知状态不崩溃。
+
+阶段门禁说明：
+
+1. AC-FE-003（runtime/reindex）在 BE-009 合入前可标记为 `Blocked`，不计入 Phase 1 完成门禁。
+2. AC-FE-006/AC-FE-007（Tool 相关）在 BE-013/BE-014 合入前可标记为 `Blocked`。
 
 ## 2. 契约对齐检查
 
