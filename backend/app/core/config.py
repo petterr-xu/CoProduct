@@ -45,6 +45,17 @@ class Settings(BaseSettings):
     upload_max_size_mb: int = 20
     cors_allow_origins: str = "http://localhost:3000"
 
+    # Agent model runtime.
+    model_mode: str = "heuristic"  # heuristic | cloud
+    model_provider: str = "openai_compatible"
+    model_api_key: str | None = None
+    model_base_url: str = "https://api.deepseek.com"
+    model_chat_model: str = "deepseek-chat"
+    model_embedding_model: str | None = None
+    model_timeout_seconds: float = 30.0
+    model_structured_retries: int = 1
+    model_temperature: float = 0.0
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
