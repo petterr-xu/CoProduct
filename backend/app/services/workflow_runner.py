@@ -321,11 +321,12 @@ class WorkflowRunner:
         )
 
     def _mark_execution_failed(self, *, task: WorkflowTaskEnvelope, error_message: str) -> None:
+        error_code, persisted_message = self._extract_error_code(error_message)
         with self.session_factory() as db:
             repo = PreReviewRepository(db)
             persistence = PersistenceService(repo)
-            persistence.persist_workflow_failure(task.session_id, error_message)
-            repo.mark_workflow_job_failed(task.session_id, error_message=error_message)
+            persistence.persist_workflow_failure(task.session_id, persisted_message)
+            repo.mark_workflow_job_failed(task.session_id, error_message=persisted_message)
             db.commit()
 
         log_event(
@@ -333,8 +334,8 @@ class WorkflowRunner:
             request_id=task.request_id,
             session_id=task.session_id,
             status="FAILED",
-            error_code="WORKFLOW_ERROR",
-            error_message=error_message,
+            error_code=error_code,
+            error_message=persisted_message,
         )
 
     @staticmethod
@@ -349,3 +350,17 @@ class WorkflowRunner:
                 return future.result(timeout=timeout_seconds)
             except FuturesTimeoutError as exc:
                 raise TimeoutError(f"workflow task timed out after {timeout_seconds}s") from exc
+
+    @staticmethod
+    def _extract_error_code(error_message: str) -> tuple[str, str]:
+        known_codes = {
+            "MODEL_SCHEMA_ERROR",
+            "MODEL_PROVIDER_ERROR",
+            "MODEL_TIMEOUT",
+            "WORKFLOW_ERROR",
+        }
+        prefix, sep, rest = error_message.partition(":")
+        if sep and prefix in known_codes:
+            normalized = rest.strip() or error_message
+            return prefix, f"{prefix}: {normalized}"
+        return "WORKFLOW_ERROR", error_message

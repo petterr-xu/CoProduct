@@ -90,7 +90,7 @@ class PersistenceService:
             "nextActions": report_payload.get("nextSteps", []),
             "uncertainties": parsed.get("uncertain_points", []),
             "evidenceCount": len(evidence_items),
-            "errorCode": "WORKFLOW_ERROR" if status == "FAILED" else None,
+            "errorCode": self._error_code_from_message(status=status, error_message=session.error_message),
             "errorMessage": session.error_message,
         }
 
@@ -114,3 +114,23 @@ class PersistenceService:
         if high_count >= 1:
             return "medium"
         return "low"
+
+    @staticmethod
+    def _error_code_from_message(*, status: str, error_message: str | None) -> str | None:
+        if status != "FAILED":
+            return None
+        if not error_message:
+            return "WORKFLOW_ERROR"
+
+        known_codes = {
+            "WORKFLOW_ERROR",
+            "MODEL_SCHEMA_ERROR",
+            "MODEL_PROVIDER_ERROR",
+            "MODEL_TIMEOUT",
+            "SUBMISSION_TIMEOUT",
+            "SUBMISSION_QUEUE_FULL",
+        }
+        prefix = error_message.split(":", 1)[0].strip()
+        if prefix in known_codes:
+            return prefix
+        return "WORKFLOW_ERROR"
