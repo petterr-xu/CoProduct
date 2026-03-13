@@ -1,6 +1,6 @@
 # 前端技术落地方案 - agent
 
-> Version: v0.2.0
+> Version: v0.2.1
 > Last Updated: 2026-03-13
 > Status: Draft
 
@@ -45,6 +45,9 @@
 - `agentRuntime`
 - `agentReindexJobs`
 
+> Obsolete in v0.2.0: runtime/reindex hooks 在前端 Phase 1 即默认接入。  
+> Replacement in v0.2.1: 仅在 BE-009 完成后启用 runtime/reindex query keys 与 hooks。
+
 关键策略：
 
 1. Trace 字段全部 optional 解析，防止旧后端返回缺失导致崩溃。
@@ -77,14 +80,19 @@
 
 ## 6. 阶段映射（Phase 1..N）
 
-1. Phase 1（配合 BE Phase 1/2）
-- 扩展类型定义与 API 解析，接入 runtime endpoint。
-2. Phase 2（配合 BE Phase 3）
-- 预审详情页展示 model/retrieval trace。
-3. Phase 3（配合 BE Phase 4）
-- 管理页 reindex 入口与 job 状态轮询。
-4. Phase 4（配合 BE Phase 5）
-- 展示 toolTrace 与 tool 调用异常提示。
+> Obsolete in v0.2.0: Phase 1 包含 runtime endpoint 接入。  
+> Replacement in v0.2.1: runtime/reindex 接入下沉到 Phase 3，对齐 BE-009。
+
+1. Phase 1（配合 BE Phase 1）
+- 扩展类型定义与 API optional 兼容解析（不依赖 runtime/reindex 接口可用）。
+2. Phase 2（配合 BE Phase 2）
+- 预审详情页展示 model/retrieval trace；表单支持 debugOptions；错误码映射增强。
+3. Phase 3（配合 BE Phase 3）
+- 接入 runtime/reindex hooks；提供管理页入口与 job 状态轮询。
+4. Phase 4（配合 BE Phase 4）
+- 双模式联调回归（heuristic/cloud, legacy/layered）与回滚演练。
+5. Phase 5（配合 BE Phase 5）
+- 展示 toolTrace，透传 toolPolicy，完成 tool 模式开关联调回归。
 
 ## 7. 设计实现映射（TD-* -> FE）
 
