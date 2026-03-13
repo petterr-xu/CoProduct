@@ -279,7 +279,7 @@ class HeuristicModelClient:
             items.append({"type": "performance_requirement", "question": "数据规模和性能目标是什么？", "priority": "MEDIUM"})
         return {"items": items}
 
-    def _build_risks(self, merged_text: str) -> list[dict]:
+    def _build_risks(self, merged_text: str) -> dict:
         risks: list[dict] = []
         if "导出" in merged_text and ("手机号" in merged_text or "用户" in merged_text):
             risks.append(
@@ -297,9 +297,9 @@ class HeuristicModelClient:
                     "level": "MEDIUM",
                 }
             )
-        return risks
+        return {"items": risks}
 
-    def _build_impacts(self, parsed_requirement: dict, module_hint: str | None) -> list[dict]:
+    def _build_impacts(self, parsed_requirement: dict, module_hint: str | None) -> dict:
         impacts: list[dict] = []
         if module_hint:
             impacts.append({"module": module_hint, "reason": "模块提示命中"})
@@ -308,7 +308,7 @@ class HeuristicModelClient:
                 impacts.append({"module": "export_service", "reason": "导出能力相关"})
             if business_object == "报名":
                 impacts.append({"module": "registration", "reason": "业务对象命中"})
-        return impacts
+        return {"items": impacts}
 
     def _build_report(
         self,

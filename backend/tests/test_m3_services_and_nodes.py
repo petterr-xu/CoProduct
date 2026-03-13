@@ -110,7 +110,7 @@ class _FailingClient:
         raise RuntimeError(f"{prompt_name} failed")
 
 
-def test_risk_and_impact_node_degrade_without_crashing() -> None:
+def test_risk_and_impact_node_fail_closed_on_invalid_output() -> None:
     node_risk = RiskAnalyzerNode(_FailingClient())
     node_impact = ImpactAnalyzerNode(_FailingClient())
 
@@ -120,8 +120,16 @@ def test_risk_and_impact_node_degrade_without_crashing() -> None:
         "parsed_requirement": {},
     }
 
-    risk = node_risk(state)
-    impact = node_impact(state)
+    try:
+        node_risk(state)
+    except RuntimeError as exc:
+        assert str(exc).startswith("MODEL_SCHEMA_ERROR:")
+    else:
+        raise AssertionError("Expected risk_analyzer to fail with MODEL_SCHEMA_ERROR")
 
-    assert risk["risk_items"] == []
-    assert impact["impact_items"] == []
+    try:
+        node_impact(state)
+    except RuntimeError as exc:
+        assert str(exc).startswith("MODEL_SCHEMA_ERROR:")
+    else:
+        raise AssertionError("Expected impact_analyzer to fail with MODEL_SCHEMA_ERROR")

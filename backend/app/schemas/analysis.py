@@ -19,6 +19,14 @@ class RiskItemSchema(BaseModel):
     level: Literal["HIGH", "MEDIUM", "LOW"]
 
 
+class RiskListSchema(BaseModel):
+    items: list[RiskItemSchema]
+
+
 class ImpactItemSchema(BaseModel):
     module: str
     reason: str
+
+
+class ImpactListSchema(BaseModel):
+    items: list[ImpactItemSchema]

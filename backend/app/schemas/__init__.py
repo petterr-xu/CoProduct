@@ -1,6 +1,13 @@
 """Schema package."""
 
-from app.schemas.analysis import ImpactItemSchema, MissingInfoItemSchema, MissingInfoListSchema, RiskItemSchema
+from app.schemas.analysis import (
+    ImpactItemSchema,
+    ImpactListSchema,
+    MissingInfoItemSchema,
+    MissingInfoListSchema,
+    RiskItemSchema,
+    RiskListSchema,
+)
 from app.schemas.capability import CapabilityJudgementSchema
 from app.schemas.evidence import EvidenceItemSchema
 from app.schemas.report import ReportSchema
@@ -15,6 +22,8 @@ __all__ = [
     "MissingInfoItemSchema",
     "MissingInfoListSchema",
     "RiskItemSchema",
+    "RiskListSchema",
     "ImpactItemSchema",
+    "ImpactListSchema",
     "ReportSchema",
 ]
