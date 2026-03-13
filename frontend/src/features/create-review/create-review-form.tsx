@@ -21,6 +21,8 @@ const DRAFT_KEY = 'coproduct:create-review:draft';
 const EXAMPLE_TEXT =
   '运营希望按活动批量导出用户报名信息，不同角色导出的字段不一样，主管可以导出手机号。';
 
+type SubmissionPhase = 'IDLE' | 'SUBMITTING' | 'ACCEPTED';
+
 export function CreateReviewForm() {
   const router = useRouter();
   const mutation = useCreatePrereview();
@@ -29,6 +31,9 @@ export function CreateReviewForm() {
   const canWrite = isWriteRole(role);
   const canUseDebugOptions = isAdminRole(role);
   const [debugOptions, setDebugOptions] = useState<PreReviewDebugOptions | undefined>(undefined);
+  const [submissionPhase, setSubmissionPhase] = useState<SubmissionPhase>('IDLE');
+  const [submissionHint, setSubmissionHint] = useState<string | null>(null);
+  const isSubmitting = mutation.isPending || submissionPhase !== 'IDLE';
 
   const defaults = useMemo(
     () => ({
@@ -84,20 +89,37 @@ export function CreateReviewForm() {
 
   const onSubmit = handleSubmit(async (values) => {
     if (!canWrite) return;
-    const result = await mutation.mutateAsync({
-      requirementText: values.requirementText,
-      backgroundText: values.backgroundText,
-      businessDomain: values.businessDomain,
-      moduleHint: values.moduleHint,
-      attachments: values.attachments,
-      debugOptions: canUseDebugOptions ? debugOptions : undefined
-    });
-    router.push(`/prereview/${result.sessionId}`);
+    if (submissionPhase === 'ACCEPTED') {
+      setSubmissionHint('任务已受理，请在详情页查看进度。');
+      return;
+    }
+    if (mutation.isPending) return;
+
+    setSubmissionHint(null);
+    setSubmissionPhase('SUBMITTING');
+    try {
+      const result = await mutation.mutateAsync({
+        requirementText: values.requirementText,
+        backgroundText: values.backgroundText,
+        businessDomain: values.businessDomain,
+        moduleHint: values.moduleHint,
+        attachments: values.attachments,
+        debugOptions: canUseDebugOptions ? debugOptions : undefined
+      });
+      setSubmissionPhase('ACCEPTED');
+      setSubmissionHint('任务已受理，正在跳转详情页并进入轮询。');
+      router.push(`/prereview/${result.sessionId}`);
+    } catch {
+      setSubmissionPhase('IDLE');
+    }
   });
 
   return (
     <form className='space-y-4' onSubmit={onSubmit}>
       {mutation.error ? <ErrorAlert message={getApiErrorMessage(mutation.error)} /> : null}
+      {submissionHint ? (
+        <section className='rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-info'>{submissionHint}</section>
+      ) : null}
       {!canWrite ? <ErrorAlert title='当前账号只读' message='VIEWER 角色不可发起预审，请联系管理员分配写权限。' /> : null}
 
       <div className='space-y-1'>
@@ -105,7 +127,7 @@ export function CreateReviewForm() {
         <textarea
           className='min-h-36 w-full rounded-md border border-black/20 bg-white p-3 text-sm outline-none focus:border-black/50'
           placeholder='请输入业务需求描述'
-          disabled={!canWrite}
+          disabled={!canWrite || isSubmitting}
           {...register('requirementText')}
         />
         <p className='text-xs text-danger'>{errors.requirementText?.message}</p>
@@ -116,7 +138,7 @@ export function CreateReviewForm() {
         <textarea
           className='min-h-24 w-full rounded-md border border-black/20 bg-white p-3 text-sm outline-none focus:border-black/50'
           placeholder='补充背景、动因和现状'
-          disabled={!canWrite}
+          disabled={!canWrite || isSubmitting}
           {...register('backgroundText')}
         />
       </div>
@@ -127,7 +149,7 @@ export function CreateReviewForm() {
           <input
             className='w-full rounded-md border border-black/20 bg-white px-3 py-2 text-sm outline-none focus:border-black/50'
             placeholder='如 activity'
-            disabled={!canWrite}
+            disabled={!canWrite || isSubmitting}
             {...register('businessDomain')}
           />
         </div>
@@ -136,7 +158,7 @@ export function CreateReviewForm() {
           <input
             className='w-full rounded-md border border-black/20 bg-white px-3 py-2 text-sm outline-none focus:border-black/50'
             placeholder='如 registration'
-            disabled={!canWrite}
+            disabled={!canWrite || isSubmitting}
             {...register('moduleHint')}
           />
         </div>
@@ -144,21 +166,25 @@ export function CreateReviewForm() {
 
       <div className='space-y-1'>
         <label className='text-sm font-medium'>附件</label>
-        <FileUploader files={attachments} onChange={(files) => setValue('attachments', files)} disabled={!canWrite} />
+        <FileUploader
+          files={attachments}
+          onChange={(files) => setValue('attachments', files)}
+          disabled={!canWrite || isSubmitting}
+        />
       </div>
 
       {canUseDebugOptions ? (
-        <DebugOptions value={debugOptions} disabled={!canWrite || mutation.isPending} onChange={setDebugOptions} />
+        <DebugOptions value={debugOptions} disabled={!canWrite || isSubmitting} onChange={setDebugOptions} />
       ) : null}
 
       <div className='flex flex-wrap items-center gap-2'>
-        <SubmitButton loading={mutation.isPending} disabled={!canWrite}>
+        <SubmitButton loading={isSubmitting} disabled={!canWrite || isSubmitting}>
           发起预审
         </SubmitButton>
         <button
           type='button'
           className='rounded-md border border-black/20 bg-white px-3 py-2 text-sm disabled:opacity-60'
-          disabled={!canWrite}
+          disabled={!canWrite || isSubmitting}
           onClick={() => setValue('requirementText', EXAMPLE_TEXT)}
         >
           一键填充示例
