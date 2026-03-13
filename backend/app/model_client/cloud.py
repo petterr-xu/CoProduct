@@ -20,11 +20,15 @@ class CloudModelClient:
         provider: ChatProvider,
         max_structured_retries: int = 1,
         temperature: float = 0.0,
+        log_output_enabled: bool = True,
+        log_output_max_chars: int = 4000,
         embedding_fallback: HeuristicModelClient | None = None,
     ) -> None:
         self.provider = provider
         self.max_structured_retries = max_structured_retries
         self.temperature = temperature
+        self.log_output_enabled = log_output_enabled
+        self.log_output_max_chars = max(200, log_output_max_chars)
         self.embedding_fallback = embedding_fallback or HeuristicModelClient()
 
     def structured_invoke(self, prompt_name: str, input_data: dict, schema: type) -> Any:
@@ -41,15 +45,24 @@ class CloudModelClient:
             ),
         )
         latency_ms = int((time.perf_counter() - start) * 1000)
+        log_fields: dict[str, Any] = {
+            "prompt_name": prompt_name,
+            "latency_ms": latency_ms,
+            "token_input_estimate": len(json.dumps(input_data, ensure_ascii=False)),
+            "token_output_estimate": len(json.dumps(attempt.validated_payload, ensure_ascii=False)),
+            "provider": "cloud",
+            "prompt_hash": prompt_build.prompt_hash,
+            "schema_name": prompt_build.schema_name,
+        }
+        if self.log_output_enabled:
+            log_fields["raw_output_preview"] = self._truncate_for_log(attempt.raw_text)
+            log_fields["validated_output_preview"] = self._truncate_for_log(
+                json.dumps(attempt.validated_payload, ensure_ascii=False)
+            )
+
         log_event(
             "model_structured_invoke",
-            prompt_name=prompt_name,
-            latency_ms=latency_ms,
-            token_input_estimate=len(json.dumps(input_data, ensure_ascii=False)),
-            token_output_estimate=len(json.dumps(attempt.validated_payload, ensure_ascii=False)),
-            provider="cloud",
-            prompt_hash=prompt_build.prompt_hash,
-            schema_name=prompt_build.schema_name,
+            **log_fields,
         )
         return attempt.validated_payload
 
@@ -74,3 +87,8 @@ class CloudModelClient:
     def rerank(self, query: str, candidates: list[str]) -> list[int]:
         # Phase 1 keeps rerank deterministic to avoid cloud variability and extra cost.
         return self.embedding_fallback.rerank(query, candidates)
+
+    def _truncate_for_log(self, text: str) -> str:
+        if len(text) <= self.log_output_max_chars:
+            return text
+        return f"{text[: self.log_output_max_chars]}...(truncated)"

@@ -22,6 +22,8 @@ def _build_model_client_cached(
     model_timeout_seconds: float,
     model_structured_retries: int,
     model_temperature: float,
+    model_log_output_enabled: bool,
+    model_log_output_max_chars: int,
 ) -> ModelClient:
     if model_mode == "heuristic":
         return HeuristicModelClient()
@@ -45,6 +47,8 @@ def _build_model_client_cached(
         provider=provider,
         max_structured_retries=model_structured_retries,
         temperature=model_temperature,
+        log_output_enabled=model_log_output_enabled,
+        log_output_max_chars=model_log_output_max_chars,
     )
 
 
@@ -61,6 +65,8 @@ def build_model_client(_settings: Settings | None = None) -> ModelClient:
         model_timeout_seconds=settings.model_timeout_seconds,
         model_structured_retries=settings.model_structured_retries,
         model_temperature=settings.model_temperature,
+        model_log_output_enabled=settings.model_log_output_enabled,
+        model_log_output_max_chars=settings.model_log_output_max_chars,
     )
     log_event(
         "model_client_built",
