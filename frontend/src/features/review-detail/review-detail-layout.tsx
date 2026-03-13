@@ -15,10 +15,11 @@ import { ReviewHeader } from '@/components/business/review-header';
 import { RiskListCard } from '@/components/business/risk-list-card';
 import { StructuredRequirementCard } from '@/components/business/structured-requirement-card';
 import { SummaryCard } from '@/components/business/summary-card';
+import { TracePanel } from '@/components/business/trace-panel';
 import { UncertaintiesCard } from '@/components/business/uncertainties-card';
 import { usePrereviewDetail, useRegeneratePrereview } from '@/hooks/use-prereview-api';
 import { getApiErrorMessage, isApiClientError } from '@/lib/api-client';
-import { isWriteRole, useAuthStore } from '@/stores/auth-store';
+import { isAdminRole, isWriteRole, useAuthStore } from '@/stores/auth-store';
 
 type Props = {
   sessionId: string;
@@ -30,6 +31,7 @@ export function ReviewDetailLayout({ sessionId }: Props) {
   const regenerateMutation = useRegeneratePrereview(sessionId);
   const role = useAuthStore((state) => state.user?.role);
   const canWrite = isWriteRole(role);
+  const canUseDebugOptions = isAdminRole(role);
 
   if (detailQuery.isLoading) {
     return <LoadingSkeleton />;
@@ -66,6 +68,8 @@ export function ReviewDetailLayout({ sessionId }: Props) {
         />
       ) : null}
 
+      <TracePanel modelTrace={data.modelTrace} retrievalTrace={data.retrievalTrace} />
+
       <div className='grid gap-4 lg:grid-cols-2'>
         <SummaryCard summary={data.summary} />
         <CapabilityCard capability={data.capability} />
@@ -80,9 +84,10 @@ export function ReviewDetailLayout({ sessionId }: Props) {
 
       <RegeneratePanel
         disabled={!canWrite}
+        showDebugOptions={canUseDebugOptions}
         loading={regenerateMutation.isPending}
-        onSubmit={async ({ additionalContext, attachments }) => {
-          const result = await regenerateMutation.mutateAsync({ additionalContext, attachments });
+        onSubmit={async ({ additionalContext, attachments, debugOptions }) => {
+          const result = await regenerateMutation.mutateAsync({ additionalContext, attachments, debugOptions });
           router.push(`/prereview/${result.sessionId}`);
         }}
       />
