@@ -1,6 +1,6 @@
 # 后端契约文档 - agent
 
-> Version: v0.2.0
+> Version: v0.2.1
 > Last Updated: 2026-03-13
 > Status: Draft
 
@@ -62,10 +62,19 @@ POST /api/prereview
 | `debugOptions.toolPolicy.enableTools` | bool | 否 | 默认 true |
 | `debugOptions.toolPolicy.maxToolCalls` | int | 否 | `1~5`，默认 3 |
 
+受理语义（Phase 1.5 新增）：
+
+1. 接口只负责受理任务（创建 request/session + 提交后台执行），不等待 workflow 完成。
+2. 响应体保持：`{ sessionId: string, status: "PROCESSING" }`。
+3. 推荐返回 `202 Accepted`；兼容可返回 `200 OK`。
+4. 受理目标耗时：P95 < 3s（不含后台执行耗时）。
+
 ### BC-004
 POST /api/prereview/{session_id}/regenerate
 
 新增可选字段同 BC-003。
+
+受理语义同 BC-003：快速受理，后台执行。
 
 ### BC-005
 GET /api/prereview/{session_id}
@@ -161,6 +170,8 @@ GET /api/prereview/{session_id}
 | 检索索引不可用 | 503/500 | `RAG_INDEX_UNAVAILABLE` |
 | 工具执行失败 | 500 | `TOOL_EXECUTION_ERROR` |
 | 工具执行超时 | 504/500 | `TOOL_TIMEOUT` |
+| 任务受理超时 | 504/500 | `SUBMISSION_TIMEOUT` |
+| 任务队列已满/系统繁忙 | 429/503 | `SUBMISSION_QUEUE_FULL` |
 | 预审流程异常 | 500 | `WORKFLOW_ERROR` |
 
 ## 5. 权限与数据范围规则

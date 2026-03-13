@@ -1,6 +1,6 @@
 # 后端检查清单 - agent
 
-> Version: v0.2.0
+> Version: v0.2.1
 > Last Updated: 2026-03-13
 > Status: Draft
 
@@ -12,6 +12,7 @@
 4. runtime/reindex API 行为符合契约。
 5. feature flag 可切换 `heuristic/cloud` 与 `legacy/layered`。
 6. Tool Executor 可执行 `retrieve_knowledge` 并受策略约束。
+7. prereview/regenerate 提交接口具备“快速受理 + 后台执行”语义。
 
 ## 2. 契约对齐检查
 
@@ -26,6 +27,7 @@
 2. reindex job 状态可追踪（至少 QUEUED->DONE/FAILED）。
 3. workflow 节点在新 ModelClient 下执行稳定。
 4. `toolTrace` 可出现在详情响应且字段语义稳定。
+5. 提交接口不再阻塞等待 workflow 完成，session 状态机可追踪。
 
 ## 4. 错误与可观测性检查
 
@@ -51,3 +53,5 @@
 | AC-BE-010 | Tool 抽象层与 RAG Tool 调用有效 | BE-013 | BC-003~BC-005 |
 | AC-BE-011 | tool-calling adapter 关闭/开启行为可控 | BE-014 | BC-003, BC-004 |
 | AC-BE-012 | toolTrace 与工具观测埋点完整 | BE-015 | BC-005 |
+| AC-BE-013 | prereview/regenerate 提交异步受理生效且响应时延达标 | BE-016, BE-017 | BC-003, BC-004 |
+| AC-BE-014 | 受理失败错误码稳定（超时/队列满） | BE-018 | BC-003, BC-004 |

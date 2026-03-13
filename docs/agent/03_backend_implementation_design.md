@@ -1,6 +1,6 @@
 # 后端技术落地方案 - agent
 
-> Version: v0.2.2
+> Version: v0.2.4
 > Last Updated: 2026-03-13
 > Status: Draft
 
@@ -275,6 +275,79 @@ flowchart LR
 1. 三个开关独立：模型、RAG、Tool 执行器可单独切换，便于灰度和回滚。
 2. 任一新链路不稳定时都能回到旧路径，降低发布风险。
 
+### 2.4 预审提交异步化（Phase 1.5 紧急项）
+
+> Obsolete in v0.2.2: `POST /api/prereview*` 请求线程同步执行完整 workflow。  
+> Replacement in v0.2.3: 请求线程只做“受理 + 入队/调度”，workflow 在后台执行。
+
+目标：
+
+1. 提交接口快速返回（目标 < 3s），避免前端 15s 网络超时。
+2. 执行失败与成功通过 session 状态查询反馈，不在提交请求内阻塞。
+
+后端实现建议：
+
+1. `create_prereview/regenerate_prereview`：
+- 只负责创建 request/session、初始化状态为 `PROCESSING`、提交后台执行任务。
+- 请求线程内禁止调用完整 `workflow.invoke`，避免长耗时阻塞。
+2. 新增 `workflow_runner`（进程内队列 + worker）：
+- 使用 `asyncio.Queue(maxsize=N)` 作为受理缓冲层，`enqueue_timeout_ms` 控制入队超时。
+- worker 循环消费任务，调用统一 workflow entrypoint 执行预审。
+- 成功时调用 `PersistenceService.persist_workflow_result`。
+- 失败时调用 `persist_workflow_failure` 并记录 `WORKFLOW_ERROR` 细分原因。
+3. 接口兼容策略：
+- 保持响应结构不变：`{ sessionId, status: "PROCESSING" }`。
+- 建议响应码为 `202 Accepted`，兼容 `200`。
+- 允许通过 header 或日志标注 `submission_mode=async` 便于排障。
+
+#### 2.4.1 Runner 组件设计（Phase 1.5 必须实现）
+
+1. 组件职责：
+- `SubmissionService`：校验参数、创建 session/request、生成 `TaskEnvelope` 并入队。
+- `WorkflowQueue`：只负责排队和背压，不包含业务逻辑。
+- `WorkflowRunner`：启动 worker、消费任务、调用 workflow、写回状态。
+- `WorkflowExecutor`：封装实际执行入口，统一捕获和分类异常。
+
+2. `TaskEnvelope` 最小字段：
+- `session_id`
+- `request_id`
+- `org_id`
+- `actor_user_id`
+- `attempt`
+- `submitted_at`
+- `trace_id`
+
+3. Worker 执行原则：
+- 每次任务执行应用 `task_timeout_ms` 上限。
+- 可重试错误仅允许有限次（`max_retries`），避免死循环。
+- 不可重试错误直接失败并落库，状态进入 `FAILED`。
+- `queue.task_done()` 必须在 `finally` 执行，避免队列阻塞。
+
+#### 2.4.2 生命周期与恢复策略（Phase 1.5 必须实现）
+
+1. Startup：
+- 初始化 `WorkflowRunner`，启动 `worker_count` 个消费协程。
+- 扫描数据库中“未终态 session（PROCESSING）”，按策略补入队列（recover）。
+
+2. Shutdown：
+- 停止接收新任务（关闭 enqueue）。
+- 优雅等待队列 drain（可配置超时），超时则记录告警并退出。
+
+3. 崩溃恢复：
+- 因队列在内存中，重启后必须依赖 DB recover 扫描恢复执行。
+- recover 任务应避免重复执行（基于 session 终态与 attempt 控制）。
+
+#### 2.4.3 受理失败与背压策略（Phase 1.5 必须实现）
+
+1. 队列满：
+- 返回 `SUBMISSION_QUEUE_FULL`（429/503）。
+2. 入队超时：
+- 返回 `SUBMISSION_TIMEOUT`（504/500）。
+3. 幂等保护：
+- 对同一业务请求支持 `idempotency_key`（可先 header 透传），减少重复提交造成的重复任务。
+4. 可观测性：
+- 至少记录 `queue_depth`, `accepted_count`, `enqueue_failed_count`, `worker_busy`, `avg_execute_ms`。
+
 ## 3. 持久化与一致性策略
 
 ### 3.1 数据表增量
@@ -333,10 +406,11 @@ flowchart LR
 ## 6. 阶段映射（Phase 1..N）
 
 1. Phase 1：ModelClient 抽象升级 + 单 provider 云接入。
-2. Phase 2：Router + fallback + observability。
-3. Phase 3：RAG 分层拆分 + hybrid pipeline。
-4. Phase 4：reindex 管理接口 + 后端可运维能力。
-5. Phase 5：RAG Tool 化 + tool-calling adapter 预留。
+2. Phase 1.5：预审提交异步化（提交/执行解耦，消除前端提交超时）。
+3. Phase 2：Router + fallback + observability。
+4. Phase 3：RAG 分层拆分 + hybrid pipeline。
+5. Phase 4：reindex 管理接口 + 后端可运维能力。
+6. Phase 5：RAG Tool 化 + tool-calling adapter 预留。
 
 ## 7. 设计实现映射（TD-* -> BE）
 
@@ -352,6 +426,7 @@ flowchart LR
 | TD-010 | feature flags + rollback | 双轨可切换 | 错误码/状态码兼容 | BE-E2E-Release-001 |
 | TD-011 | `tools/*` + `knowledge_retriever` 调整 | tool trace optional 持久化 | `/api/prereview*`, `/api/prereview/{id}` | BE-IT-Tool-001 |
 | TD-012 | `llm_tool_calling` adapter 预留 | 默认关闭，不影响旧链路 | `/api/prereview*` debugOptions | BE-IT-ToolAdapter-001 |
+| TD-013 | `services/prereview_service` + `workflow_runner` + `asyncio.Queue` 异步执行 | session 状态机可追踪 + recover 扫描 | `/api/prereview*`, `/api/prereview/{id}` | BE-IT-AsyncSubmit-001 |
 
 ## 8. 风险点实现计划（对应 01）
 
@@ -363,3 +438,4 @@ flowchart LR
 | R-004 | dual-run 对比 & trace | `COPRODUCT_AGENT_TRACE_ENABLED` | 关闭 trace/新链路 | AC-E2E-004 |
 | R-005 | 契约自动校验脚本 | CI check_doc_pack | 回滚到上一合同版本 | AC-E2E-002 |
 | R-006 | 工具过度调用导致性能劣化 | `max_tool_calls` + per-tool timeout | `COPRODUCT_TOOL_MODE=disabled` | AC-BE-010 |
+| R-007 | 提交接口同步阻塞导致前端超时 | 提交异步化 + 状态轮询 + 队列背压 | `prereview_service` 请求线程仅受理，`workflow_runner` 后台执行 | AC-BE-013 |

@@ -1,6 +1,6 @@
 # 前端检查清单 - agent
 
-> Version: v0.2.1
+> Version: v0.2.2
 > Last Updated: 2026-03-13
 > Status: Draft
 
@@ -14,8 +14,9 @@
 
 阶段门禁说明：
 
-1. AC-FE-003（runtime/reindex）在 BE-009 合入前可标记为 `Blocked`，不计入 Phase 1 完成门禁。
-2. AC-FE-006/AC-FE-007（Tool 相关）在 BE-013/BE-014 合入前可标记为 `Blocked`。
+1. AC-FE-008（提交异步受理）在 BE-016/BE-017 合入前可标记为 `Blocked`，但必须先于 Phase 2 关闭。
+2. AC-FE-003（runtime/reindex）在 BE-009 合入前可标记为 `Blocked`，不计入 Phase 1/1.5 完成门禁。
+3. AC-FE-006/AC-FE-007（Tool 相关）在 BE-013/BE-014 合入前可标记为 `Blocked`。
 
 ## 2. 契约对齐检查
 
@@ -49,3 +50,4 @@
 | AC-FE-005 | 双模式兼容回归通过 | FE-009 | FC-001~FC-005 / BC-001~BC-005 |
 | AC-FE-006 | toolTrace 展示与兼容解析通过 | FE-010 | FC-005 / BC-005 |
 | AC-FE-007 | toolPolicy 透传与开关行为正确 | FE-011, FE-012 | FC-003, FC-004 / BC-003, BC-004 |
+| AC-FE-008 | 提交后快速进入 PROCESSING 并轮询，不因前端固定超时误判失败 | FE-013, FE-014 | FC-003, FC-004, FC-005 / BC-003, BC-004, BC-005 |

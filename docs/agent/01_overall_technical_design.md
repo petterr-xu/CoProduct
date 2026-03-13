@@ -1,6 +1,6 @@
 # 总体技术设计方案 - agent
 
-> Version: v0.2.0
+> Version: v0.2.1
 > Last Updated: 2026-03-13
 > Status: Draft
 
@@ -18,6 +18,7 @@
 2. 建设分层级可插拔 RAG 系统，使 Agent 可按场景启用 dense/sparse/hybrid/rerank 能力。
 3. 保持现有预审业务接口兼容，采用增量演进方式上线。
 4. 将 RAG 封装为标准 Tool，为后续 LLM tool calling 扩展做协议与执行层准备。
+5. 消除“预审提交长耗时导致前端超时”的同步阻塞问题，建立提交快速返回机制。
 
 ## 2. 范围（In/Out）
 
@@ -165,9 +166,10 @@ flowchart TB
 > Obsolete in v0.2.0: 原关键流程将 RAG 视为节点内部直接调用模块。  
 > Replacement in v0.2.0: RAG 通过 `retrieve_knowledge` Tool 由 Tool Executor 调用，后续可平滑接入 LLM tool calling。
 
-1. 预审执行：`PreReviewService -> Workflow -> ModelClient + RAG -> PersistenceService`。
-2. 模型调用：Router 按策略选择 provider，失败时 fallback，统一输出结构化结果。
-3. Tool 化检索：`query plan -> ToolExecutor(retrieve_knowledge) -> dense/sparse/hybrid -> fusion -> rerank -> evidence`。
+1. 预审提交：`POST /api/prereview*` 仅负责创建 request/session 并提交后台执行任务，快速返回 `sessionId + PROCESSING`。
+2. 后台执行：`PreReviewService(worker) -> Workflow -> ModelClient + RAG -> PersistenceService`。
+3. 模型调用：Router 按策略选择 provider，失败时 fallback，统一输出结构化结果。
+4. Tool 化检索：`query plan -> ToolExecutor(retrieve_knowledge) -> dense/sparse/hybrid -> fusion -> rerank -> evidence`。
 
 ## 4. 数据与状态模型
 
@@ -194,6 +196,12 @@ flowchart TB
 1. 建立 provider adapter 抽象。
 2. 接入至少 1 个云模型 provider（OpenAI-compatible）。
 3. 保持现有 workflow 节点调用方式不破坏。
+
+### Phase 1.5：预审提交异步化（紧急）
+
+1. 将 `POST /api/prereview`、`POST /api/prereview/{session_id}/regenerate` 改为“快速受理 + 后台执行”。
+2. 确保提交接口不会因 LLM/RAG 耗时阻塞前端超时（提交路径目标响应 < 3s）。
+3. 前端统一改为“提交成功即进入 PROCESSING + 轮询详情状态”。
 
 ### Phase 2：模型路由与可靠性
 
@@ -249,6 +257,7 @@ flowchart TB
 | TD-010 | 联调验收与回滚开关落地 | BOTH | P0 | 发布门禁 |
 | TD-011 | 将 RAG 封装为标准 Tool 并接入执行器 | BE | P0 | 后续 tool calling 前置条件 |
 | TD-012 | 预留 LLM tool-calling 协议适配层 | BOTH | P1 | 默认可关闭，先内测 |
+| TD-013 | 预审提交非阻塞化：接口快速受理，工作流后台执行 | BOTH | P0 | 优先级高于 Phase 2 |
 
 ## 8. 风险-缓解-实现映射
 
@@ -260,6 +269,7 @@ flowchart TB
 | R-004 | 新架构影响线上稳定性 | feature flags + 双轨运行 + 可回退 legacy | 配置开关 + `legacy` adapter | AC-E2E-004 |
 | R-005 | 前后端契约不一致 | 明确 FC/BC 字段语义 + 自动一致性检查 | `04/05` + consistency script | AC-E2E-002 |
 | R-006 | Tool 参数失控或过度调用导致延迟/成本上升 | 参数 schema 校验 + max_tool_calls + 超时熔断 | `tool_executor.py` + policy config | AC-BE-010 |
+| R-007 | 同步执行导致提交接口超时，前端误判失败 | 提交/执行解耦（异步任务）+ 快速返回 + 状态轮询 | `PreReviewService` 异步调度 + `/api/prereview/{session_id}` 状态查询 | AC-E2E-008 |
 
 ## 9. 参考开源资料（调研来源）
 

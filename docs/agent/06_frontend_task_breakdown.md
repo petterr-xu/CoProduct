@@ -1,6 +1,6 @@
 # 前端任务拆解文档 - agent
 
-> Version: v0.2.1
+> Version: v0.2.3
 > Last Updated: 2026-03-13
 > Status: Draft
 
@@ -11,6 +11,13 @@
 
 1. FE-001：扩展 `types/index.ts`，新增 `modelTrace/retrievalTrace/toolTrace/debugOptions` 类型。
 2. FE-002：扩展 `api-client.ts`，完成 optional 字段兼容解析与请求透传兼容。
+
+## 1.5 Phase 1.5 任务（紧急）
+
+1. FE-013：提交链路改造为“受理成功即进入 PROCESSING 态 + 轮询详情”，不等待完整报告返回。
+2. FE-014：补充 `SUBMISSION_TIMEOUT/SUBMISSION_QUEUE_FULL` 错误提示与重试交互。
+3. FE-015：实现提交态机与防重复提交（`SUBMITTING` 态禁用按钮，受理后阻止重复发起）。
+4. FE-016：实现分段轮询策略（立即拉取 + 2s/5s 退避）并在终态自动停止。
 
 ## 2. Phase 2 任务
 
@@ -36,19 +43,22 @@
 推荐顺序：
 
 1. FE-001 -> FE-002（先契约与数据兼容层）
-2. FE-004 -> FE-005 -> FE-006（再详情页与表单能力）
-3. FE-003 -> FE-007 -> FE-008（管理与运维能力，等待 BE-009）
-4. FE-009（双模式联调回归）
-5. FE-010 -> FE-011 -> FE-012（Tool 能力展示与回归）
+2. FE-013 -> FE-014 -> FE-015 -> FE-016（先解决提交超时的紧急链路）
+3. FE-004 -> FE-005 -> FE-006（再详情页与表单能力）
+4. FE-003 -> FE-007 -> FE-008（管理与运维能力，等待 BE-009）
+5. FE-009（双模式联调回归）
+6. FE-010 -> FE-011 -> FE-012（Tool 能力展示与回归）
 
 跨端依赖：
 
 1. FE-001/FE-002 可先行，不阻塞于 BE-009。
-2. FE-004/FE-005 依赖 BE-006/BE-007（trace/debugOptions 在主链路稳定）。
-3. FE-003/FE-007/FE-008 依赖 BE-009（runtime/reindex API）。
-4. FE-009 依赖 BE-012（回滚开关与监控信号）。
-5. FE-010 依赖 BE-013（RAG Tool 化与 `toolTrace` 返回字段）。
-6. FE-011/FE-012 依赖 BE-014（tool calling adapter 预留与开关）。
+2. FE-013/FE-014 依赖 BE-016/BE-017/BE-018（后端提交异步化与受理错误码）。
+3. FE-015/FE-016 依赖 BE-019（runner 生命周期稳定，轮询不会出现长时间“僵尸处理中”）。
+4. FE-004/FE-005 依赖 BE-006/BE-007（trace/debugOptions 在主链路稳定）。
+5. FE-003/FE-007/FE-008 依赖 BE-009（runtime/reindex API）。
+6. FE-009 依赖 BE-012（回滚开关与监控信号）。
+7. FE-010 依赖 BE-013（RAG Tool 化与 `toolTrace` 返回字段）。
+8. FE-011/FE-012 依赖 BE-014（tool calling adapter 预留与开关）。
 
 ## 5. 风险与缓解
 
@@ -60,6 +70,10 @@
 - 缓解：统一落在 `getApiErrorMessage` 并补充回归用例。
 4. 风险：toolTrace 字段结构变化导致前端崩溃。
 - 缓解：严格 optional parse + 未知状态兜底映射。
+5. 风险：提交接口超时导致用户重复提交。
+- 缓解：Phase 1.5 强制“受理即跳转轮询”并提供重复提交提示。
+6. 风险：轮询策略过于激进导致不必要请求压力。
+- 缓解：FE-016 使用分段退避并在终态及时停止。
 
 ## 6. 追踪矩阵（FE-*）
 
@@ -67,6 +81,10 @@
 |---|---|---|---|---|
 | FE-001 | 扩展前端类型定义 | TD-004, TD-008 | FC-001~FC-005 | - |
 | FE-002 | API client 兼容解析 | TD-008 | FC-003, FC-004, FC-005 | FE-001 |
+| FE-013 | 提交成功快速跳转 + 轮询过渡 | TD-013 | FC-003, FC-004, FC-005 | FE-002, BE-016 |
+| FE-014 | 提交受理错误码提示与重试 | TD-013 | FC-003, FC-004 | FE-013, BE-017 |
+| FE-015 | 提交态机与防重复提交 | TD-013 | FC-003, FC-004 | FE-013, FE-014, BE-018 |
+| FE-016 | 分段轮询退避与终态停止 | TD-013 | FC-005 | FE-013, FE-015, BE-019 |
 | FE-003 | Agent API hooks | TD-009 | FC-001, FC-002 | FE-002, BE-009 |
 | FE-004 | 详情页 Trace 面板 | TD-004 | FC-005 | FE-002, BE-006 |
 | FE-005 | debugOptions 表单能力 | TD-008 | FC-003, FC-004 | FE-002, BE-007 |

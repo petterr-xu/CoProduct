@@ -1,15 +1,16 @@
 # 总体检查清单 - agent
 
-> Version: v0.2.0
+> Version: v0.2.1
 > Last Updated: 2026-03-13
 > Status: Draft
 
 ## 1. 端到端链路检查
 
 1. 登录 -> 新建预审 -> 详情展示 trace -> 再生成，全链路可用。
-2. 管理员可查看 runtime 并触发 reindex，状态可见。
-3. 切换到 fallback 模式后（heuristic/legacy）业务链路仍可用。
-4. 启用 Tool 模式后，`retrieve_knowledge` 路径可用且可回退。
+2. 提交预审后应快速受理并进入 `PROCESSING`，不因长耗时模型调用导致前端超时假失败。
+3. 管理员可查看 runtime 并触发 reindex，状态可见。
+4. 切换到 fallback 模式后（heuristic/legacy）业务链路仍可用。
+5. 启用 Tool 模式后，`retrieve_knowledge` 路径可用且可回退。
 
 ## 2. 前后端契约兼容性检查
 
@@ -21,10 +22,11 @@
 ## 3. 阶段完成度检查（Phase 1..N）
 
 1. Phase 1：云模型接入与兼容运行完成。
-2. Phase 2：路由可靠性与可观测完成。
-3. Phase 3：分层 RAG 与 hybrid 检索完成。
-4. Phase 4：运维入口与回滚机制完成。
-5. Phase 5：RAG Tool 化与 tool-calling 预留完成。
+2. Phase 1.5：提交异步受理与前端轮询链路完成（关闭超时缺陷）。
+3. Phase 2：路由可靠性与可观测完成。
+4. Phase 3：分层 RAG 与 hybrid 检索完成。
+5. Phase 4：运维入口与回滚机制完成。
+6. Phase 5：RAG Tool 化与 tool-calling 预留完成。
 
 ## 4. 发布 Gate
 
@@ -47,3 +49,4 @@
 | AC-E2E-005 | 管理端 runtime/reindex 运维闭环可用 | TD-009 | FE-003, FE-007, FE-008 | BE-009, BE-011 |
 | AC-E2E-006 | RAG Tool 化后业务链路稳定 | TD-011 | FE-010, FE-012 | BE-013, BE-015 |
 | AC-E2E-007 | tool-calling 适配层默认关闭且可灰度启用 | TD-012 | FE-011, FE-012 | BE-014, BE-015 |
+| AC-E2E-008 | 提交接口异步受理生效，前端不再出现固定超时假失败 | TD-013 | FE-013, FE-014 | BE-016, BE-017, BE-018 |

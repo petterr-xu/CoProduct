@@ -1,6 +1,6 @@
 # 前端契约文档 - agent
 
-> Version: v0.2.0
+> Version: v0.2.1
 > Last Updated: 2026-03-13
 > Status: Draft
 
@@ -136,6 +136,8 @@ interface AgentReindexResponse {
 | `RAG_QUERY_INVALID` | 标记 debug 参数非法并回退默认 |
 | `TOOL_EXECUTION_ERROR` | 提示“工具执行失败”，显示降级结果 |
 | `TOOL_TIMEOUT` | 提示“工具调用超时”，建议重试 |
+| `SUBMISSION_TIMEOUT` | 提示“任务受理超时”，允许用户重试提交 |
+| `SUBMISSION_QUEUE_FULL` | 提示“系统繁忙，任务队列已满”，建议稍后重试 |
 | `PERMISSION_DENIED` | 管理按钮禁用 + toast |
 | `WORKFLOW_ERROR` | 详情页失败态 |
 
@@ -200,6 +202,12 @@ POST /api/prereview
 - 响应：`{ sessionId: string; status: "PROCESSING" }`
 - 兼容：`debugOptions` 可省略
 
+受理语义（Phase 1.5 新增）：
+
+1. 提交接口为“快速受理”语义，返回不等待完整 workflow 执行完成。
+2. 前端收到成功响应后必须跳转详情页并轮询 `GET /api/prereview/{session_id}`。
+3. 后端推荐 `202 Accepted`；若仍返回 `200`，前端按成功受理同等处理。
+
 ### FC-004
 POST /api/prereview/{session_id}/regenerate
 
@@ -207,6 +215,8 @@ POST /api/prereview/{session_id}/regenerate
 - 请求：`RegeneratePreReviewRequest`
 - 响应：`{ sessionId: string; status: "PROCESSING" }`
 - 失败：`404 VALIDATION_ERROR`（父会话不存在）
+
+受理语义同 FC-003：快速受理，不同步阻塞执行。
 
 ### FC-005
 GET /api/prereview/{session_id}
