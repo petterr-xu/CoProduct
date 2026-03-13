@@ -4,7 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { apiClient, isApiClientError } from '@/lib/api-client';
 import { QUERY_KEYS } from '@/lib/constants';
-import { HistoryQuery, UploadedFileRef } from '@/types';
+import { HistoryQuery, RegeneratePreReviewPayload } from '@/types';
 
 export function useCreatePrereview() {
   return useMutation({
@@ -32,8 +32,7 @@ export function usePrereviewDetail(sessionId: string) {
 
 export function useRegeneratePrereview(sessionId: string) {
   return useMutation({
-    mutationFn: (payload: { additionalContext: string; attachments?: UploadedFileRef[] }) =>
-      apiClient.regeneratePrereview(sessionId, payload)
+    mutationFn: (payload: RegeneratePreReviewPayload) => apiClient.regeneratePrereview(sessionId, payload)
   });
 }
 

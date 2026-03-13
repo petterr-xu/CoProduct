@@ -49,6 +49,8 @@ export type SessionStatus = 'PROCESSING' | 'DONE' | 'FAILED';
 export type ReviewViewStatus = SessionStatus | 'NOT_FOUND';
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 export type FileParseStatus = 'PENDING' | 'PARSING' | 'DONE' | 'FAILED';
+export type RetrievalMode = 'dense' | 'sparse' | 'hybrid';
+export type ToolTraceStatus = 'SUCCESS' | 'FAILED' | 'TIMEOUT' | 'SKIPPED';
 
 export type UploadedFileRef = {
   fileId: string;
@@ -57,12 +59,28 @@ export type UploadedFileRef = {
   parseStatus: FileParseStatus;
 };
 
+export type PreReviewDebugOptions = {
+  includeTrace?: boolean;
+  retrievalMode?: RetrievalMode;
+  toolPolicy?: {
+    enableTools?: boolean;
+    maxToolCalls?: number;
+  };
+};
+
 export type CreatePreReviewForm = {
   requirementText: string;
   backgroundText?: string;
   businessDomain?: string;
   moduleHint?: string;
   attachments?: UploadedFileRef[];
+  debugOptions?: PreReviewDebugOptions;
+};
+
+export type RegeneratePreReviewPayload = {
+  additionalContext: string;
+  attachments?: UploadedFileRef[];
+  debugOptions?: PreReviewDebugOptions;
 };
 
 export type EvidenceItem = {
@@ -99,6 +117,30 @@ export type PreReviewReportView = {
   impactScope: string[];
   nextActions: string[];
   uncertainties: string[];
+  modelTrace?: {
+    provider: string;
+    model: string;
+    latencyMs: number;
+    totalTokens?: number;
+    costUsd?: number;
+    fallbackPath?: string[];
+  } | null;
+  retrievalTrace?: {
+    mode: RetrievalMode;
+    backend: string;
+    denseHits: number;
+    sparseHits: number;
+    fusedHits: number;
+    reranker?: string;
+    latencyMs: number;
+  } | null;
+  toolTrace?: Array<{
+    toolName: string;
+    status: ToolTraceStatus;
+    latencyMs: number;
+    argsSummary?: string;
+    errorCode?: string;
+  }> | null;
   errorCode?: string | null;
   errorMessage?: string | null;
 };

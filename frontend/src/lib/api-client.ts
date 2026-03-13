@@ -25,8 +25,11 @@ import {
   MemberListItem,
   MemberStatus,
   PreReviewReportView,
+  RegeneratePreReviewPayload,
+  RetrievalMode,
   Role,
   SessionStatus,
+  ToolTraceStatus,
   UpdateFunctionalRoleStatusRequest,
   UpdateMemberFunctionalRoleRequest,
   UpdateMemberRoleRequest,
@@ -61,6 +64,15 @@ export function getApiErrorMessage(error: unknown, fallback = '请求失败，�
     if (error.code === 'USER_DISABLED') return '账号已被禁用，请联系管理员。';
     if (error.code === 'API_KEY_REVOKED') return '该密钥已被吊销，请联系管理员。';
     if (error.code === 'RATE_LIMITED') return '请求过于频繁，请稍后再试。';
+    if (error.code === 'MODEL_TIMEOUT') return '模型调用超时，请稍后重试。';
+    if (error.code === 'MODEL_RATE_LIMIT') return '模型请求被限流，请稍后重试。';
+    if (error.code === 'MODEL_SCHEMA_ERROR') return '模型结果结构异常，系统已尝试降级处理。';
+    if (error.code === 'MODEL_PROVIDER_ERROR') return '模型服务异常，请稍后重试。';
+    if (error.code === 'RAG_INDEX_UNAVAILABLE') return '知识索引暂不可用，请稍后重试。';
+    if (error.code === 'RAG_QUERY_INVALID') return '检索参数不合法，请检查调试选项。';
+    if (error.code === 'RAG_RERANK_FAILED') return '检索重排失败，系统可能已降级处理。';
+    if (error.code === 'TOOL_EXECUTION_ERROR') return '工具执行失败，已尝试降级处理。';
+    if (error.code === 'TOOL_TIMEOUT') return '工具调用超时，请稍后重试。';
     if (error.code === 'RESOURCE_NOT_FOUND') return '目标资源不存在。';
     if (error.code === 'LAST_OWNER_PROTECTED') return '组织至少需要保留一名可用的所有者。';
     if (error.code === 'SELF_OPERATION_FORBIDDEN') return '该操作会影响当前登录身份，已被系统拦截。';
@@ -93,6 +105,8 @@ const MEMBER_STATUS_SET = new Set<MemberStatus>(['INVITED', 'ACTIVE', 'SUSPENDED
 const API_KEY_STATUS_SET = new Set<ApiKeyStatus>(['ACTIVE', 'REVOKED', 'EXPIRED']);
 const CONFIDENCE_SET = new Set(['high', 'medium', 'low']);
 const FILE_PARSE_STATUS_SET = new Set<FileParseStatus>(['PENDING', 'PARSING', 'DONE', 'FAILED']);
+const RETRIEVAL_MODE_SET = new Set<RetrievalMode>(['dense', 'sparse', 'hybrid']);
+const TOOL_TRACE_STATUS_SET = new Set<ToolTraceStatus>(['SUCCESS', 'FAILED', 'TIMEOUT', 'SKIPPED']);
 
 function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
@@ -187,6 +201,68 @@ function normalizeFileParseStatus(value: unknown): FileParseStatus {
   return 'PENDING';
 }
 
+function normalizeRetrievalMode(value: unknown): RetrievalMode {
+  const text = asString(value).toLowerCase();
+  if (RETRIEVAL_MODE_SET.has(text as RetrievalMode)) {
+    return text as RetrievalMode;
+  }
+  return 'hybrid';
+}
+
+function normalizeToolTraceStatus(value: unknown): ToolTraceStatus {
+  const text = asString(value).toUpperCase();
+  if (TOOL_TRACE_STATUS_SET.has(text as ToolTraceStatus)) {
+    return text as ToolTraceStatus;
+  }
+  return 'FAILED';
+}
+
+function normalizeModelTrace(value: unknown): PreReviewReportView['modelTrace'] {
+  if (!value || typeof value !== 'object') return null;
+  const row = value as Record<string, unknown>;
+  const provider = asString(row.provider);
+  const model = asString(row.model);
+  if (!provider || !model) return null;
+  return {
+    provider,
+    model,
+    latencyMs: asNumber(row.latencyMs),
+    totalTokens: typeof row.totalTokens === 'number' ? row.totalTokens : undefined,
+    costUsd: typeof row.costUsd === 'number' ? row.costUsd : undefined,
+    fallbackPath: asArray(row.fallbackPath).map((item) => asString(item)).filter(Boolean)
+  };
+}
+
+function normalizeRetrievalTrace(value: unknown): PreReviewReportView['retrievalTrace'] {
+  if (!value || typeof value !== 'object') return null;
+  const row = value as Record<string, unknown>;
+  const backend = asString(row.backend);
+  if (!backend) return null;
+  return {
+    mode: normalizeRetrievalMode(row.mode),
+    backend,
+    denseHits: asNumber(row.denseHits),
+    sparseHits: asNumber(row.sparseHits),
+    fusedHits: asNumber(row.fusedHits),
+    reranker: asString(row.reranker, '') || undefined,
+    latencyMs: asNumber(row.latencyMs)
+  };
+}
+
+function normalizeToolTrace(value: unknown): PreReviewReportView['toolTrace'] {
+  if (!Array.isArray(value)) return null;
+  return value.map((item) => {
+    const row = (item ?? {}) as Record<string, unknown>;
+    return {
+      toolName: asString(row.toolName, 'unknown_tool'),
+      status: normalizeToolTraceStatus(row.status),
+      latencyMs: asNumber(row.latencyMs),
+      argsSummary: asString(row.argsSummary, '') || undefined,
+      errorCode: asString(row.errorCode, '') || undefined
+    };
+  });
+}
+
 function normalizeReviewDetail(payload: unknown): PreReviewReportView {
   const data = (payload ?? {}) as Record<string, unknown>;
   const capability = (data.capability ?? {}) as Record<string, unknown>;
@@ -236,6 +312,9 @@ function normalizeReviewDetail(payload: unknown): PreReviewReportView {
     impactScope: asArray(data.impactScope).map((item) => asString(item)).filter(Boolean),
     nextActions: asArray(data.nextActions).map((item) => asString(item)).filter(Boolean),
     uncertainties: asArray(data.uncertainties).map((item) => asString(item)).filter(Boolean),
+    modelTrace: normalizeModelTrace(data.modelTrace),
+    retrievalTrace: normalizeRetrievalTrace(data.retrievalTrace),
+    toolTrace: normalizeToolTrace(data.toolTrace),
     errorCode: asString(data.errorCode, '') || null,
     errorMessage: asString(data.errorMessage, '') || null
   };
@@ -478,9 +557,20 @@ async function requestJson<T>(path: string, init?: RequestInit, options?: Reques
 
 export const apiClient = {
   createPrereview(payload: CreatePreReviewForm) {
+    const attachments = payload.attachments ?? [];
+    const body: Record<string, unknown> = {
+      requirementText: payload.requirementText,
+      backgroundText: payload.backgroundText,
+      businessDomain: payload.businessDomain,
+      moduleHint: payload.moduleHint,
+      attachments: attachments.map((file) => ({ fileId: file.fileId }))
+    };
+    if (payload.debugOptions) {
+      body.debugOptions = payload.debugOptions;
+    }
     return requestJson<{ sessionId: string; status: string }>('/api/prereview', {
       method: 'POST',
-      body: JSON.stringify(payload)
+      body: JSON.stringify(body)
     });
   },
 
@@ -489,21 +579,19 @@ export const apiClient = {
     return normalizeReviewDetail(raw);
   },
 
-  regeneratePrereview(
-    sessionId: string,
-    payload: {
-      additionalContext: string;
-      attachments?: UploadedFileRef[];
-    }
-  ) {
+  regeneratePrereview(sessionId: string, payload: RegeneratePreReviewPayload) {
     const trimmedContext = payload.additionalContext.trim();
     const attachments = payload.attachments ?? [];
+    const body: Record<string, unknown> = {
+      additionalContext: trimmedContext,
+      attachments: attachments.map((f) => ({ fileId: f.fileId }))
+    };
+    if (payload.debugOptions) {
+      body.debugOptions = payload.debugOptions;
+    }
     return requestJson<{ sessionId: string; status: string }>(`/api/prereview/${sessionId}/regenerate`, {
       method: 'POST',
-      body: JSON.stringify({
-        additionalContext: trimmedContext,
-        attachments: attachments.map((f) => ({ fileId: f.fileId }))
-      })
+      body: JSON.stringify(body)
     });
   },
 

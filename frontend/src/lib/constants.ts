@@ -1,4 +1,4 @@
-import { ApiKeyStatus, CapabilityStatus, MemberStatus, Role, SessionStatus, UserStatus } from '@/types';
+import { ApiKeyStatus, CapabilityStatus, MemberStatus, RetrievalMode, Role, SessionStatus, ToolTraceStatus, UserStatus } from '@/types';
 
 export const STATUS_COLOR_MAP: Record<CapabilityStatus, string> = {
   SUPPORTED: 'text-success bg-green-100 border-green-200',
@@ -56,6 +56,19 @@ export const API_KEY_STATUS_LABEL_MAP: Record<ApiKeyStatus, string> = {
   ACTIVE: '可用',
   REVOKED: '已吊销',
   EXPIRED: '已过期'
+};
+
+export const RETRIEVAL_MODE_LABEL_MAP: Record<RetrievalMode, string> = {
+  dense: '向量检索',
+  sparse: '关键词检索',
+  hybrid: '混合检索'
+};
+
+export const TOOL_TRACE_STATUS_LABEL_MAP: Record<ToolTraceStatus, string> = {
+  SUCCESS: '成功',
+  FAILED: '失败',
+  TIMEOUT: '超时',
+  SKIPPED: '跳过'
 };
 
 export const QUERY_KEYS = {
