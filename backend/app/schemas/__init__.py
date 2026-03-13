@@ -1,4 +1,8 @@
-"""Schema package."""
+"""Central exports for workflow schema contracts.
+
+Import schemas from this module in nodes/services to keep contracts consistent
+and avoid scattered direct module paths.
+"""
 
 from app.schemas.analysis import (
     ImpactItemSchema,
