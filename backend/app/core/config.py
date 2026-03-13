@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     model_temperature: float = 0.0
     model_log_output_enabled: bool = True
     model_log_output_max_chars: int = 4000
+    model_output_language: str = "zh-CN"
+    model_output_language_enforce: bool = True
 
     # Phase 1.5 async workflow submission runtime.
     workflow_queue_maxsize: int = 128

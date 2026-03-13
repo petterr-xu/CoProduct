@@ -71,7 +71,24 @@ def load_prompt_template(prompt_name: str) -> str:
     return text
 
 
-def build_structured_prompt(*, prompt_name: str, input_data: dict[str, Any], schema: type) -> PromptBuildResult:
+def _language_contract(output_language: str) -> str:
+    normalized = (output_language or "").strip().lower()
+    if normalized in {"zh-cn", "zh_cn", "zh"}:
+        return (
+            "Natural-language output fields MUST be in Simplified Chinese (zh-CN).\n"
+            "Do not mix in English sentences for prose fields.\n"
+            "Stable identifiers/enums/IDs may remain ASCII when required by schema."
+        )
+    return f"Natural-language output fields MUST use language `{output_language}`."
+
+
+def build_structured_prompt(
+    *,
+    prompt_name: str,
+    input_data: dict[str, Any],
+    schema: type,
+    output_language: str = "zh-CN",
+) -> PromptBuildResult:
     """Compose a strict, schema-bound prompt from template + runtime payload."""
     template = load_prompt_template(prompt_name)
     schema_name, schema_contract = _schema_contract(schema)
@@ -83,6 +100,8 @@ def build_structured_prompt(*, prompt_name: str, input_data: dict[str, Any], sch
         f"{template}\n\n"
         "## Schema Contract\n"
         f"{schema_contract}\n\n"
+        "## Language Contract\n"
+        f"{_language_contract(output_language)}\n\n"
         "## Output Hard Rules\n"
         "- Output MUST be valid JSON only.\n"
         "- Do not output markdown, code fences, comments, or explanation text.\n"
