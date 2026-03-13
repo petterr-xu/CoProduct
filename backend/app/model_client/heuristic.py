@@ -266,7 +266,7 @@ class HeuristicModelClient:
             "evidence_refs": [item.get("chunk_id", "") for item in evidence_pack if item.get("chunk_id")],
         }
 
-    def _build_missing_info(self, parsed_requirement: dict, merged_text: str) -> list[dict]:
+    def _build_missing_info(self, parsed_requirement: dict, merged_text: str) -> dict:
         items: list[dict] = []
         if not parsed_requirement.get("actors"):
             items.append({"type": "target_user", "question": "目标用户是谁？", "priority": "HIGH"})
@@ -277,7 +277,7 @@ class HeuristicModelClient:
             items.append({"type": "time_requirement", "question": "是否有明确时效要求？", "priority": "MEDIUM"})
         if "性能" not in merged_text and "量级" not in merged_text:
             items.append({"type": "performance_requirement", "question": "数据规模和性能目标是什么？", "priority": "MEDIUM"})
-        return items
+        return {"items": items}
 
     def _build_risks(self, merged_text: str) -> list[dict]:
         risks: list[dict] = []

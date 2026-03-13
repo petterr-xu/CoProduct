@@ -9,6 +9,10 @@ class MissingInfoItemSchema(BaseModel):
     priority: Literal["HIGH", "MEDIUM", "LOW"]
 
 
+class MissingInfoListSchema(BaseModel):
+    items: list[MissingInfoItemSchema]
+
+
 class RiskItemSchema(BaseModel):
     type: str
     description: str

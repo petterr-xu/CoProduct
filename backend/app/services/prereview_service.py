@@ -64,7 +64,8 @@ class PreReviewService:
         self.persistence_service = PersistenceService(repo)
         self.attachment_service = AttachmentService(settings=settings, repo=repo)
         # Keep workflow injection for compatibility with existing callers/tests.
-        self.workflow = workflow or PreReviewWorkflow(settings)
+        # Phase 1.5 submission path no longer invokes workflow in request thread.
+        self.workflow = workflow
 
     def create_prereview(self, payload: PreReviewCreateInput) -> PreReviewSubmission:
         """Create request/session and build async workflow task."""

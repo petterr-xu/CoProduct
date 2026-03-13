@@ -18,8 +18,16 @@ def _schema_hint(schema: type) -> str:
     if schema is dict:
         return "Return a JSON object."
     if isinstance(schema, type) and issubclass(schema, BaseModel):
-        fields = ", ".join(schema.model_fields.keys())
-        return f"Return a JSON object matching `{schema.__name__}` with fields: {fields}."
+        json_schema = json.dumps(schema.model_json_schema(), ensure_ascii=False)
+        return (
+            f"Return a JSON object matching `{schema.__name__}`.\n"
+            "Strict constraints:\n"
+            "- Keep exact field names from schema.\n"
+            "- Include every required field.\n"
+            "- Enum fields must use allowed values only.\n"
+            "- Do not add unknown fields.\n"
+            f"JSON Schema: {json_schema}"
+        )
     return "Return valid JSON."
 
 
@@ -98,4 +106,3 @@ class CloudModelClient:
     def rerank(self, query: str, candidates: list[str]) -> list[int]:
         # Phase 1 keeps rerank deterministic to avoid cloud variability and extra cost.
         return self.embedding_fallback.rerank(query, candidates)
-
